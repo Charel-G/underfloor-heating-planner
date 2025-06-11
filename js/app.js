@@ -7,13 +7,18 @@ window.addEventListener('load', () => {
     const selectBtn = document.getElementById('selectBtn');
     const drawZoneBtn = document.getElementById('drawZoneBtn');
     const addDistributorBtn = document.getElementById('addDistributorBtn');
+    const editDistributorBtn = document.getElementById('editDistributorBtn');
+    const panBtn = document.getElementById('panBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
     const spacingInput = document.getElementById('pipeSpacing');
     const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
 
-    let gridSize = parseInt(gridInput.value, 10) || 50;
+    let gridSize = parseFloat(gridInput.value) || 38;
+    let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
+    let offsetX = 0;
+    let offsetY = 0;
     let floors = [];
     let currentFloor = null;
     let mode = null;
@@ -85,6 +90,24 @@ window.addEventListener('load', () => {
         mode = 'distributor';
     });
 
+    editDistributorBtn.addEventListener('click', () => {
+        if (selectedDistributor) {
+            const width = parseFloat(prompt('Width (m)?', (selectedDistributor.width/pixelsPerMeter).toFixed(2)), 10);
+            const height = parseFloat(prompt('Height (m)?', (selectedDistributor.height/pixelsPerMeter).toFixed(2)), 10);
+            const name = prompt('Name?', selectedDistributor.name) || selectedDistributor.name;
+            const connections = parseInt(prompt('Connections?', selectedDistributor.connections), 10);
+            if (!isNaN(width)) selectedDistributor.width = width * pixelsPerMeter;
+            if (!isNaN(height)) selectedDistributor.height = height * pixelsPerMeter;
+            if (!isNaN(connections)) selectedDistributor.connections = connections;
+            selectedDistributor.name = name;
+            drawAll();
+        }
+    });
+
+    panBtn.addEventListener('click', () => {
+        mode = 'pan';
+    });
+
     clearBtn.addEventListener('click', () => {
         if (!currentFloor) return;
         currentFloor.walls = [];
@@ -97,7 +120,8 @@ window.addEventListener('load', () => {
     });
 
     gridInput.addEventListener('change', () => {
-        gridSize = parseInt(gridInput.value, 10) || 50;
+        gridSize = parseFloat(gridInput.value) || 38;
+        pixelsPerMeter = gridSize * 2;
         drawAll();
     });
 
@@ -105,10 +129,11 @@ window.addEventListener('load', () => {
         if (!selectedWall) return;
         const len = parseFloat(lengthInput.value);
         if (isNaN(len)) return;
+        const target = len * pixelsPerMeter;
         const dx = selectedWall.x2 - selectedWall.x1;
         const dy = selectedWall.y2 - selectedWall.y1;
         const current = Math.hypot(dx, dy) || 1;
-        const factor = len / current;
+        const factor = target / current;
         selectedWall.x2 = selectedWall.x1 + dx * factor;
         selectedWall.y2 = selectedWall.y1 + dy * factor;
         drawAll();
@@ -117,11 +142,11 @@ window.addEventListener('load', () => {
     function drawGrid() {
         ctx.strokeStyle = '#ccc';
         ctx.beginPath();
-        for (let x = 0; x <= canvas.width; x += gridSize) {
+        for (let x = -offsetX % gridSize; x <= canvas.width; x += gridSize) {
             ctx.moveTo(x, 0);
             ctx.lineTo(x, canvas.height);
         }
-        for (let y = 0; y <= canvas.height; y += gridSize) {
+        for (let y = -offsetY % gridSize; y <= canvas.height; y += gridSize) {
             ctx.moveTo(0, y);
             ctx.lineTo(canvas.width, y);
         }
@@ -130,6 +155,8 @@ window.addEventListener('load', () => {
 
     function drawAll() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
         drawGrid();
         if (!currentFloor) return;
         ctx.strokeStyle = '#000';
@@ -166,14 +193,18 @@ window.addEventListener('load', () => {
                 ctx.fillText(d.name, d.x - d.width / 2 + 2, d.y - d.height / 2 + 12);
             }
         });
+        ctx.restore();
     }
 
     function drawPipes() {
         drawAll();
         if (!currentFloor) return;
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
         ctx.strokeStyle = 'orange';
         currentFloor.zones.forEach(room => {
-            const spacing = room.spacing || parseInt(spacingInput.value, 10) || gridSize;
+            const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
+            const spacing = room.spacing || defSpacing || gridSize;
             let leftToRight = true;
             for (let y = room.y + spacing / 2; y < room.y + room.height; y += spacing) {
                 ctx.beginPath();
@@ -198,6 +229,7 @@ window.addEventListener('load', () => {
             ctx.lineTo(room.x + room.width / 2, room.y + room.height / 2);
             ctx.stroke();
         });
+        ctx.restore();
     }
 
     const SNAP_DIST = 10;
@@ -238,6 +270,10 @@ window.addEventListener('load', () => {
         return Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
     }
 
+    function wallLengthMeters(w) {
+        return wallLength(w) / pixelsPerMeter;
+    }
+
     function hitTestWall(x, y) {
         for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
             const w = currentFloor.walls[i];
@@ -266,6 +302,10 @@ window.addEventListener('load', () => {
         return Math.hypot(px - lx, py - ly);
     }
 
+    function screenToWorld(x, y) {
+        return { x: x - offsetX, y: y - offsetY };
+    }
+
     function hitTestZone(x, y) {
         for (let i = currentFloor.zones.length - 1; i >= 0; i--) {
             const r = currentFloor.zones[i];
@@ -290,16 +330,27 @@ window.addEventListener('load', () => {
     canvas.addEventListener('mousedown', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
-        startX = e.clientX - rect.left;
-        startY = e.clientY - rect.top;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const world = screenToWorld(sx, sy);
+        if (mode === 'pan') {
+            startX = sx;
+            startY = sy;
+            drawing = true;
+            return;
+        }
+        startX = world.x;
+        startY = world.y;
         if (mode === 'wall' || mode === 'zone') {
             drawing = true;
         } else if (mode === 'distributor') {
-            const width = parseInt(prompt('Width (m)?', '30'), 10) || 30;
-            const height = parseInt(prompt('Height (m)?', '10'), 10) || 10;
+            const width = parseFloat(prompt('Width (m)?', '0.3')) || 0.3;
+            const height = parseFloat(prompt('Height (m)?', '0.1')) || 0.1;
+            const pxWidth = width * pixelsPerMeter;
+            const pxHeight = height * pixelsPerMeter;
             const name = prompt('Name?', `D${currentFloor.distributors.length + 1}`) || '';
             const connections = parseInt(prompt('Connections?', '2'), 10) || 2;
-            currentFloor.distributors.push({ x: startX, y: startY, width, height, name, connections });
+            currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
             drawAll();
         } else if (mode === 'select') {
             const hit = hitTestWall(startX, startY);
@@ -310,7 +361,7 @@ window.addEventListener('load', () => {
                 dragMode = hit.mode;
                 drawing = true;
                 lengthInput.disabled = false;
-                lengthInput.value = wallLength(selectedWall).toFixed(0);
+                lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
             } else {
                 selectedWall = null;
                 lengthInput.value = '';
@@ -339,8 +390,21 @@ window.addEventListener('load', () => {
     canvas.addEventListener('mousemove', e => {
         if (!drawing) return;
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const pos = screenToWorld(sx, sy);
+        const x = pos.x;
+        const y = pos.y;
+        if (mode === 'pan') {
+            const dx = sx - startX;
+            const dy = sy - startY;
+            offsetX += dx;
+            offsetY += dy;
+            startX = sx;
+            startY = sy;
+            drawAll();
+            return;
+        }
         drawAll();
         if (mode === 'wall') {
             const snap = snapAngle(x - startX, y - startY);
@@ -364,7 +428,7 @@ window.addEventListener('load', () => {
                 selectedWall.y2 += dy;
                 startX = x;
                 startY = y;
-                lengthInput.value = wallLength(selectedWall).toFixed(0);
+                lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
                 drawAll();
             } else if (dragMode === 'end1' || dragMode === 'end2') {
                 const anchorX = dragMode === 'end1' ? selectedWall.x2 : selectedWall.x1;
@@ -378,7 +442,7 @@ window.addEventListener('load', () => {
                     selectedWall.x2 = snapped.x;
                     selectedWall.y2 = snapped.y;
                 }
-                lengthInput.value = wallLength(selectedWall).toFixed(0);
+                lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
                 drawAll();
             }
         } else if (mode === 'select' && selectedZone && dragMode === 'moveZone') {
@@ -404,8 +468,14 @@ window.addEventListener('load', () => {
         if (!drawing) return;
         drawing = false;
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const pos = screenToWorld(sx, sy);
+        const x = pos.x;
+        const y = pos.y;
+        if (mode === 'pan') {
+            return;
+        }
         if (mode === 'wall') {
             const snap = snapAngle(x - startX, y - startY);
             const snapped = snapToPoints(startX + snap.dx, startY + snap.dy);
@@ -418,7 +488,8 @@ window.addEventListener('load', () => {
         } else if (mode === 'zone') {
             const snap = snapToPoints(x, y);
             const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
-            const spacing = parseInt(prompt('Pipe spacing?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || gridSize;
+            const spacingMm = parseInt(prompt('Pipe spacing (mm)?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || 0;
+            const spacing = spacingMm / 1000 * pixelsPerMeter;
             let distributorId = null;
             if (currentFloor.distributors.length > 0) {
                 const list = currentFloor.distributors.map((d,i) => `${i}: ${d.name}`).join('\n');
@@ -436,7 +507,7 @@ window.addEventListener('load', () => {
                 distributorId
             });
         } else if (mode === 'select') {
-            lengthInput.value = selectedWall ? wallLength(selectedWall).toFixed(0) : '';
+            lengthInput.value = selectedWall ? wallLengthMeters(selectedWall).toFixed(2) : '';
         }
         dragMode = null;
         drawAll();
@@ -447,14 +518,17 @@ window.addEventListener('load', () => {
     canvas.addEventListener('dblclick', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const pos = screenToWorld(sx, sy);
+        const x = pos.x;
+        const y = pos.y;
         const r = hitTestZone(x, y);
         const d = hitTestDistributor(x, y);
         if (r) {
             r.name = prompt('Zone name?', r.name || '') || r.name;
-            const spacing = parseInt(prompt('Pipe spacing?', r.spacing), 10);
-            if (!isNaN(spacing)) r.spacing = spacing;
+            const spacingMm = parseInt(prompt('Pipe spacing (mm)?', Math.round(r.spacing / pixelsPerMeter * 1000)), 10);
+            if (!isNaN(spacingMm)) r.spacing = spacingMm / 1000 * pixelsPerMeter;
             if (currentFloor.distributors.length > 0) {
                 const list = currentFloor.distributors.map((d,i)=>`${i}: ${d.name}`).join('\n');
                 const ans = prompt('Distributor index:\n' + list, r.distributorId ?? '');
@@ -464,11 +538,11 @@ window.addEventListener('load', () => {
             drawAll();
         } else if (d) {
             d.name = prompt('Name?', d.name || '') || d.name;
-            const width = parseInt(prompt('Width?', d.width), 10);
-            const height = parseInt(prompt('Height?', d.height), 10);
+            const width = parseFloat(prompt('Width (m)?', (d.width/pixelsPerMeter).toFixed(2)), 10);
+            const height = parseFloat(prompt('Height (m)?', (d.height/pixelsPerMeter).toFixed(2)), 10);
             const connections = parseInt(prompt('Connections?', d.connections), 10);
-            if (!isNaN(width)) d.width = width;
-            if (!isNaN(height)) d.height = height;
+            if (!isNaN(width)) d.width = width * pixelsPerMeter;
+            if (!isNaN(height)) d.height = height * pixelsPerMeter;
             if (!isNaN(connections)) d.connections = connections;
             drawAll();
         }
