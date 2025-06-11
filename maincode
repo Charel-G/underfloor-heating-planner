@@ -1,7 +1,1 @@
-echo "# underfloor-heating-planner" >> main.html
-git init
-git add main.html
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/Charel-G/underfloor-heating-planner.git
-git push -u origin main
+
