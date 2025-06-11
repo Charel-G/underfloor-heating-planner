@@ -21,7 +21,9 @@ window.addEventListener('load', () => {
     let startX = 0;
     let startY = 0;
     let selectedWall = null;
-    let dragMode = null; // move, end1, end2
+    let selectedRoom = null;
+    let selectedDistributor = null;
+    let dragMode = null; // move, end1, end2 or moveRoom/distributor
 
     function addFloor(name) {
         floors.push({
@@ -50,6 +52,9 @@ window.addEventListener('load', () => {
 
     floorSelect.addEventListener('change', () => {
         currentFloor = floors[parseInt(floorSelect.value, 10)];
+        selectedWall = null;
+        selectedRoom = null;
+        selectedDistributor = null;
         drawAll();
     });
 
@@ -87,6 +92,9 @@ window.addEventListener('load', () => {
         currentFloor.rooms = [];
         currentFloor.distributors = [];
         currentFloor.zones = [];
+        selectedWall = null;
+        selectedRoom = null;
+        selectedDistributor = null;
         drawAll();
     });
 
@@ -139,23 +147,25 @@ window.addEventListener('load', () => {
         // zones
         ctx.fillStyle = 'rgba(0,255,0,0.1)';
         currentFloor.rooms.forEach(r => {
+            ctx.fillStyle = r === selectedRoom ? 'rgba(0,255,0,0.3)' : 'rgba(0,255,0,0.1)';
             ctx.fillRect(r.x, r.y, r.width, r.height);
+            ctx.strokeStyle = r === selectedRoom ? 'red' : '#000';
             ctx.strokeRect(r.x, r.y, r.width, r.height);
             if (r.name) {
                 ctx.fillStyle = '#000';
                 ctx.fillText(r.name, r.x + 4, r.y + 12);
-                ctx.fillStyle = 'rgba(0,255,0,0.1)';
             }
         });
         // distributors
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
         currentFloor.distributors.forEach(d => {
+            ctx.fillStyle = d === selectedDistributor ? 'rgba(0,0,255,0.5)' : 'rgba(0,0,255,0.3)';
             ctx.fillRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
+            ctx.strokeStyle = d === selectedDistributor ? 'red' : '#000';
             ctx.strokeRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
             if (d.name) {
                 ctx.fillStyle = '#000';
                 ctx.fillText(d.name, d.x - d.width / 2 + 2, d.y - d.height / 2 + 12);
-                ctx.fillStyle = 'rgba(0,0,255,0.3)';
             }
         });
     }
@@ -258,6 +268,27 @@ window.addEventListener('load', () => {
         return Math.hypot(px - lx, py - ly);
     }
 
+    function hitTestRoom(x, y) {
+        for (let i = currentFloor.rooms.length - 1; i >= 0; i--) {
+            const r = currentFloor.rooms[i];
+            if (x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    function hitTestDistributor(x, y) {
+        for (let i = currentFloor.distributors.length - 1; i >= 0; i--) {
+            const d = currentFloor.distributors[i];
+            if (x >= d.x - d.width / 2 && x <= d.x + d.width / 2 &&
+                y >= d.y - d.height / 2 && y <= d.y + d.height / 2) {
+                return d;
+            }
+        }
+        return null;
+    }
+
     canvas.addEventListener('mousedown', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
@@ -276,6 +307,8 @@ window.addEventListener('load', () => {
             const hit = hitTestWall(startX, startY);
             if (hit.wall) {
                 selectedWall = hit.wall;
+                selectedRoom = null;
+                selectedDistributor = null;
                 dragMode = hit.mode;
                 drawing = true;
                 lengthInput.disabled = false;
@@ -284,7 +317,23 @@ window.addEventListener('load', () => {
                 selectedWall = null;
                 lengthInput.value = '';
                 lengthInput.disabled = true;
-                drawAll();
+                const r = hitTestRoom(startX, startY);
+                const d = hitTestDistributor(startX, startY);
+                if (r) {
+                    selectedRoom = r;
+                    selectedDistributor = null;
+                    dragMode = 'moveRoom';
+                    drawing = true;
+                } else if (d) {
+                    selectedDistributor = d;
+                    selectedRoom = null;
+                    dragMode = 'moveDistributor';
+                    drawing = true;
+                } else {
+                    selectedRoom = null;
+                    selectedDistributor = null;
+                    drawAll();
+                }
             }
         }
     });
@@ -334,6 +383,22 @@ window.addEventListener('load', () => {
                 lengthInput.value = wallLength(selectedWall).toFixed(0);
                 drawAll();
             }
+        } else if (mode === 'select' && selectedRoom && dragMode === 'moveRoom') {
+            const dx = x - startX;
+            const dy = y - startY;
+            selectedRoom.x += dx;
+            selectedRoom.y += dy;
+            startX = x;
+            startY = y;
+            drawAll();
+        } else if (mode === 'select' && selectedDistributor && dragMode === 'moveDistributor') {
+            const dx = x - startX;
+            const dy = y - startY;
+            selectedDistributor.x += dx;
+            selectedDistributor.y += dy;
+            startX = x;
+            startY = y;
+            drawAll();
         }
     });
 
@@ -380,6 +445,36 @@ window.addEventListener('load', () => {
     });
 
     drawPipesBtn.addEventListener('click', drawPipes);
+
+    canvas.addEventListener('dblclick', e => {
+        if (!currentFloor) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const r = hitTestRoom(x, y);
+        const d = hitTestDistributor(x, y);
+        if (r) {
+            r.name = prompt('Zone name?', r.name || '') || r.name;
+            const spacing = parseInt(prompt('Pipe spacing?', r.spacing), 10);
+            if (!isNaN(spacing)) r.spacing = spacing;
+            if (currentFloor.distributors.length > 0) {
+                const list = currentFloor.distributors.map((d,i)=>`${i}: ${d.name}`).join('\n');
+                const ans = prompt('Distributor index:\n' + list, r.distributorId ?? '');
+                const idx = parseInt(ans, 10);
+                if (!isNaN(idx) && currentFloor.distributors[idx]) r.distributorId = idx;
+            }
+            drawAll();
+        } else if (d) {
+            d.name = prompt('Name?', d.name || '') || d.name;
+            const width = parseInt(prompt('Width?', d.width), 10);
+            const height = parseInt(prompt('Height?', d.height), 10);
+            const connections = parseInt(prompt('Connections?', d.connections), 10);
+            if (!isNaN(width)) d.width = width;
+            if (!isNaN(height)) d.height = height;
+            if (!isNaN(connections)) d.connections = connections;
+            drawAll();
+        }
+    });
 
     // initialise with one floor
     addFloor('Floor 1');
