@@ -5,7 +5,7 @@ window.addEventListener('load', () => {
     const floorSelect = document.getElementById('floorSelect');
     const drawWallBtn = document.getElementById('drawWallBtn');
     const selectBtn = document.getElementById('selectBtn');
-    const drawRoomBtn = document.getElementById('drawRoomBtn');
+    const drawZoneBtn = document.getElementById('drawZoneBtn');
     const addDistributorBtn = document.getElementById('addDistributorBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
@@ -21,17 +21,16 @@ window.addEventListener('load', () => {
     let startX = 0;
     let startY = 0;
     let selectedWall = null;
-    let selectedRoom = null;
+    let selectedZone = null;
     let selectedDistributor = null;
-    let dragMode = null; // move, end1, end2 or moveRoom/distributor
+    let dragMode = null; // move, end1, end2 or moveZone/distributor
 
     function addFloor(name) {
         floors.push({
             name,
             walls: [],
-            rooms: [],
-            distributors: [],
-            zones: []
+            zones: [],
+            distributors: []
         });
         currentFloor = floors[floors.length - 1];
         updateFloorSelect();
@@ -53,7 +52,7 @@ window.addEventListener('load', () => {
     floorSelect.addEventListener('change', () => {
         currentFloor = floors[parseInt(floorSelect.value, 10)];
         selectedWall = null;
-        selectedRoom = null;
+        selectedZone = null;
         selectedDistributor = null;
         drawAll();
     });
@@ -78,8 +77,8 @@ window.addEventListener('load', () => {
         drawAll();
     });
 
-    drawRoomBtn.addEventListener('click', () => {
-        mode = 'room';
+    drawZoneBtn.addEventListener('click', () => {
+        mode = 'zone';
     });
 
     addDistributorBtn.addEventListener('click', () => {
@@ -89,11 +88,10 @@ window.addEventListener('load', () => {
     clearBtn.addEventListener('click', () => {
         if (!currentFloor) return;
         currentFloor.walls = [];
-        currentFloor.rooms = [];
-        currentFloor.distributors = [];
         currentFloor.zones = [];
+        currentFloor.distributors = [];
         selectedWall = null;
-        selectedRoom = null;
+        selectedZone = null;
         selectedDistributor = null;
         drawAll();
     });
@@ -146,10 +144,10 @@ window.addEventListener('load', () => {
         ctx.strokeStyle = '#000';
         // zones
         ctx.fillStyle = 'rgba(0,255,0,0.1)';
-        currentFloor.rooms.forEach(r => {
-            ctx.fillStyle = r === selectedRoom ? 'rgba(0,255,0,0.3)' : 'rgba(0,255,0,0.1)';
+        currentFloor.zones.forEach(r => {
+            ctx.fillStyle = r === selectedZone ? 'rgba(0,255,0,0.3)' : 'rgba(0,255,0,0.1)';
             ctx.fillRect(r.x, r.y, r.width, r.height);
-            ctx.strokeStyle = r === selectedRoom ? 'red' : '#000';
+            ctx.strokeStyle = r === selectedZone ? 'red' : '#000';
             ctx.strokeRect(r.x, r.y, r.width, r.height);
             if (r.name) {
                 ctx.fillStyle = '#000';
@@ -174,7 +172,7 @@ window.addEventListener('load', () => {
         drawAll();
         if (!currentFloor) return;
         ctx.strokeStyle = 'orange';
-        currentFloor.rooms.forEach(room => {
+        currentFloor.zones.forEach(room => {
             const spacing = room.spacing || parseInt(spacingInput.value, 10) || gridSize;
             let leftToRight = true;
             for (let y = room.y + spacing / 2; y < room.y + room.height; y += spacing) {
@@ -192,7 +190,7 @@ window.addEventListener('load', () => {
         });
         // connection lines from distributors to zones
         ctx.strokeStyle = 'blue';
-        currentFloor.rooms.forEach(room => {
+        currentFloor.zones.forEach(room => {
             const d = currentFloor.distributors[room.distributorId || 0];
             if (!d) return;
             ctx.beginPath();
@@ -268,9 +266,9 @@ window.addEventListener('load', () => {
         return Math.hypot(px - lx, py - ly);
     }
 
-    function hitTestRoom(x, y) {
-        for (let i = currentFloor.rooms.length - 1; i >= 0; i--) {
-            const r = currentFloor.rooms[i];
+    function hitTestZone(x, y) {
+        for (let i = currentFloor.zones.length - 1; i >= 0; i--) {
+            const r = currentFloor.zones[i];
             if (x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) {
                 return r;
             }
@@ -294,7 +292,7 @@ window.addEventListener('load', () => {
         const rect = canvas.getBoundingClientRect();
         startX = e.clientX - rect.left;
         startY = e.clientY - rect.top;
-        if (mode === 'wall' || mode === 'room') {
+        if (mode === 'wall' || mode === 'zone') {
             drawing = true;
         } else if (mode === 'distributor') {
             const width = parseInt(prompt('Width (m)?', '30'), 10) || 30;
@@ -307,7 +305,7 @@ window.addEventListener('load', () => {
             const hit = hitTestWall(startX, startY);
             if (hit.wall) {
                 selectedWall = hit.wall;
-                selectedRoom = null;
+                selectedZone = null;
                 selectedDistributor = null;
                 dragMode = hit.mode;
                 drawing = true;
@@ -317,20 +315,20 @@ window.addEventListener('load', () => {
                 selectedWall = null;
                 lengthInput.value = '';
                 lengthInput.disabled = true;
-                const r = hitTestRoom(startX, startY);
+                const r = hitTestZone(startX, startY);
                 const d = hitTestDistributor(startX, startY);
                 if (r) {
-                    selectedRoom = r;
+                    selectedZone = r;
                     selectedDistributor = null;
-                    dragMode = 'moveRoom';
+                    dragMode = 'moveZone';
                     drawing = true;
                 } else if (d) {
                     selectedDistributor = d;
-                    selectedRoom = null;
+                    selectedZone = null;
                     dragMode = 'moveDistributor';
                     drawing = true;
                 } else {
-                    selectedRoom = null;
+                    selectedZone = null;
                     selectedDistributor = null;
                     drawAll();
                 }
@@ -352,7 +350,7 @@ window.addEventListener('load', () => {
             ctx.moveTo(startX, startY);
             ctx.lineTo(snapped.x, snapped.y);
             ctx.stroke();
-        } else if (mode === 'room') {
+        } else if (mode === 'zone') {
             ctx.strokeStyle = 'red';
             const snap = snapToPoints(x, y);
             ctx.strokeRect(startX, startY, snap.x - startX, snap.y - startY);
@@ -383,11 +381,11 @@ window.addEventListener('load', () => {
                 lengthInput.value = wallLength(selectedWall).toFixed(0);
                 drawAll();
             }
-        } else if (mode === 'select' && selectedRoom && dragMode === 'moveRoom') {
+        } else if (mode === 'select' && selectedZone && dragMode === 'moveZone') {
             const dx = x - startX;
             const dy = y - startY;
-            selectedRoom.x += dx;
-            selectedRoom.y += dy;
+            selectedZone.x += dx;
+            selectedZone.y += dy;
             startX = x;
             startY = y;
             drawAll();
@@ -417,9 +415,9 @@ window.addEventListener('load', () => {
                 x2: snapped.x,
                 y2: snapped.y
             });
-        } else if (mode === 'room') {
+        } else if (mode === 'zone') {
             const snap = snapToPoints(x, y);
-            const name = prompt('Zone name?', `Zone ${currentFloor.rooms.length + 1}`) || '';
+            const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
             const spacing = parseInt(prompt('Pipe spacing?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || gridSize;
             let distributorId = null;
             if (currentFloor.distributors.length > 0) {
@@ -428,7 +426,7 @@ window.addEventListener('load', () => {
                 const idx = parseInt(ans, 10);
                 if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
             }
-            currentFloor.rooms.push({
+            currentFloor.zones.push({
                 x: Math.min(startX, snap.x),
                 y: Math.min(startY, snap.y),
                 width: Math.abs(snap.x - startX),
@@ -451,7 +449,7 @@ window.addEventListener('load', () => {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        const r = hitTestRoom(x, y);
+        const r = hitTestZone(x, y);
         const d = hitTestDistributor(x, y);
         if (r) {
             r.name = prompt('Zone name?', r.name || '') || r.name;
