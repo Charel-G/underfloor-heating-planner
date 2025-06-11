@@ -29,6 +29,7 @@ window.addEventListener('load', () => {
     let selectedZone = null;
     let selectedDistributor = null;
     let dragMode = null; // move, end1, end2 or moveZone/distributor
+    let zoneDrawing = null; // array of points while creating a zone
 
     function addFloor(name) {
         floors.push({
@@ -170,17 +171,32 @@ window.addEventListener('load', () => {
         });
         ctx.strokeStyle = '#000';
         // zones
-        ctx.fillStyle = 'rgba(0,255,0,0.1)';
-        currentFloor.zones.forEach(r => {
-            ctx.fillStyle = r === selectedZone ? 'rgba(0,255,0,0.3)' : 'rgba(0,255,0,0.1)';
-            ctx.fillRect(r.x, r.y, r.width, r.height);
-            ctx.strokeStyle = r === selectedZone ? 'red' : '#000';
-            ctx.strokeRect(r.x, r.y, r.width, r.height);
-            if (r.name) {
+        currentFloor.zones.forEach(z => {
+            ctx.beginPath();
+            ctx.moveTo(z.points[0].x, z.points[0].y);
+            for (let i = 1; i < z.points.length; i++) {
+                ctx.lineTo(z.points[i].x, z.points[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = z === selectedZone ? 'rgba(0,255,0,0.3)' : 'rgba(0,255,0,0.1)';
+            ctx.fill();
+            ctx.strokeStyle = z === selectedZone ? 'red' : '#000';
+            ctx.stroke();
+            if (z.name) {
+                const b = zoneBounds(z);
                 ctx.fillStyle = '#000';
-                ctx.fillText(r.name, r.x + 4, r.y + 12);
+                ctx.fillText(z.name, b.x + 4, b.y + 12);
             }
         });
+        if (zoneDrawing && mode === 'zone') {
+            ctx.beginPath();
+            ctx.moveTo(zoneDrawing[0].x, zoneDrawing[0].y);
+            for (let i = 1; i < zoneDrawing.length; i++) {
+                ctx.lineTo(zoneDrawing[i].x, zoneDrawing[i].y);
+            }
+            ctx.strokeStyle = 'red';
+            ctx.stroke();
+        }
         // distributors
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
         currentFloor.distributors.forEach(d => {
@@ -203,17 +219,18 @@ window.addEventListener('load', () => {
         ctx.translate(offsetX, offsetY);
         ctx.strokeStyle = 'orange';
         currentFloor.zones.forEach(room => {
+            const rect = zoneBounds(room);
             const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
             const spacing = room.spacing || defSpacing || gridSize;
             let leftToRight = true;
-            for (let y = room.y + spacing / 2; y < room.y + room.height; y += spacing) {
+            for (let y = rect.y + spacing / 2; y < rect.y + rect.height; y += spacing) {
                 ctx.beginPath();
                 if (leftToRight) {
-                    ctx.moveTo(room.x, y);
-                    ctx.lineTo(room.x + room.width, y);
+                    ctx.moveTo(rect.x, y);
+                    ctx.lineTo(rect.x + rect.width, y);
                 } else {
-                    ctx.moveTo(room.x + room.width, y);
-                    ctx.lineTo(room.x, y);
+                    ctx.moveTo(rect.x + rect.width, y);
+                    ctx.lineTo(rect.x, y);
                 }
                 ctx.stroke();
                 leftToRight = !leftToRight;
@@ -222,11 +239,12 @@ window.addEventListener('load', () => {
         // connection lines from distributors to zones
         ctx.strokeStyle = 'blue';
         currentFloor.zones.forEach(room => {
+            const rect = zoneBounds(room);
             const d = currentFloor.distributors[room.distributorId || 0];
             if (!d) return;
             ctx.beginPath();
             ctx.moveTo(d.x, d.y);
-            ctx.lineTo(room.x + room.width / 2, room.y + room.height / 2);
+            ctx.lineTo(rect.x + rect.width / 2, rect.y + rect.height / 2);
             ctx.stroke();
         });
         ctx.restore();
@@ -257,6 +275,14 @@ window.addEventListener('load', () => {
                 {x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2}
             ];
             points.forEach(p => {
+                if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
+                    sx = p.x;
+                    sy = p.y;
+                }
+            });
+        });
+        currentFloor.zones.forEach(z => {
+            z.points.forEach(p => {
                 if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
                     sx = p.x;
                     sy = p.y;
@@ -302,6 +328,29 @@ window.addEventListener('load', () => {
         return Math.hypot(px - lx, py - ly);
     }
 
+    function zoneBounds(z) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        z.points.forEach(p => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+        });
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    function pointInPolygon(x, y, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i].x, yi = poly[i].y;
+            const xj = poly[j].x, yj = poly[j].y;
+            const intersect = ((yi > y) !== (yj > y)) &&
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
     function screenToWorld(x, y) {
         return { x: x - offsetX, y: y - offsetY };
     }
@@ -309,7 +358,7 @@ window.addEventListener('load', () => {
     function hitTestZone(x, y) {
         for (let i = currentFloor.zones.length - 1; i >= 0; i--) {
             const r = currentFloor.zones[i];
-            if (x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) {
+            if (pointInPolygon(x, y, r.points)) {
                 return r;
             }
         }
@@ -341,7 +390,15 @@ window.addEventListener('load', () => {
         }
         startX = world.x;
         startY = world.y;
-        if (mode === 'wall' || mode === 'zone') {
+        if (mode === 'wall') {
+            drawing = true;
+        } else if (mode === 'zone') {
+            const snap = snapToPoints(startX, startY);
+            if (!zoneDrawing) {
+                zoneDrawing = [snap];
+            }
+            startX = zoneDrawing[zoneDrawing.length - 1].x;
+            startY = zoneDrawing[zoneDrawing.length - 1].y;
             drawing = true;
         } else if (mode === 'distributor') {
             const width = parseFloat(prompt('Width (m)?', '0.3')) || 0.3;
@@ -415,9 +472,16 @@ window.addEventListener('load', () => {
             ctx.lineTo(snapped.x, snapped.y);
             ctx.stroke();
         } else if (mode === 'zone') {
+            if (!zoneDrawing) return;
             ctx.strokeStyle = 'red';
             const snap = snapToPoints(x, y);
-            ctx.strokeRect(startX, startY, snap.x - startX, snap.y - startY);
+            ctx.beginPath();
+            ctx.moveTo(zoneDrawing[0].x, zoneDrawing[0].y);
+            for (let i = 1; i < zoneDrawing.length; i++) {
+                ctx.lineTo(zoneDrawing[i].x, zoneDrawing[i].y);
+            }
+            ctx.lineTo(snap.x, snap.y);
+            ctx.stroke();
         } else if (mode === 'select' && selectedWall) {
             if (dragMode === 'move') {
                 const dx = x - startX;
@@ -448,8 +512,10 @@ window.addEventListener('load', () => {
         } else if (mode === 'select' && selectedZone && dragMode === 'moveZone') {
             const dx = x - startX;
             const dy = y - startY;
-            selectedZone.x += dx;
-            selectedZone.y += dy;
+            selectedZone.points.forEach(p => {
+                p.x += dx;
+                p.y += dy;
+            });
             startX = x;
             startY = y;
             drawAll();
@@ -486,26 +552,32 @@ window.addEventListener('load', () => {
                 y2: snapped.y
             });
         } else if (mode === 'zone') {
+            if (!zoneDrawing) return;
             const snap = snapToPoints(x, y);
-            const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
-            const spacingMm = parseInt(prompt('Pipe spacing (mm)?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || 0;
-            const spacing = spacingMm / 1000 * pixelsPerMeter;
-            let distributorId = null;
-            if (currentFloor.distributors.length > 0) {
-                const list = currentFloor.distributors.map((d,i) => `${i}: ${d.name}`).join('\n');
-                const ans = prompt('Distributor index:\n' + list, '0');
-                const idx = parseInt(ans, 10);
-                if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
+            const first = zoneDrawing[0];
+            if (zoneDrawing.length >= 2 && Math.hypot(snap.x - first.x, snap.y - first.y) < SNAP_DIST) {
+                // close polygon
+                const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
+                const spacingMm = parseInt(prompt('Pipe spacing (mm)?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || 0;
+                const spacing = spacingMm / 1000 * pixelsPerMeter;
+                let distributorId = null;
+                if (currentFloor.distributors.length > 0) {
+                    const list = currentFloor.distributors.map((d,i) => `${i}: ${d.name}`).join('\n');
+                    const ans = prompt('Distributor index:\n' + list, '0');
+                    const idx = parseInt(ans, 10);
+                    if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
+                }
+                const points = zoneDrawing.slice();
+                currentFloor.zones.push({ points, name, spacing, distributorId });
+                zoneDrawing = null;
+            } else {
+                zoneDrawing.push(snap);
+                startX = snap.x;
+                startY = snap.y;
+                drawing = false;
+                drawAll();
+                return;
             }
-            currentFloor.zones.push({
-                x: Math.min(startX, snap.x),
-                y: Math.min(startY, snap.y),
-                width: Math.abs(snap.x - startX),
-                height: Math.abs(snap.y - startY),
-                name,
-                spacing,
-                distributorId
-            });
         } else if (mode === 'select') {
             lengthInput.value = selectedWall ? wallLengthMeters(selectedWall).toFixed(2) : '';
         }
