@@ -2,7 +2,8 @@ window.addEventListener('load', () => {
     const canvas = document.getElementById('floorPlanCanvas');
     const ctx = canvas.getContext('2d');
     const addFloorBtn = document.getElementById('addFloorBtn');
-    const floorSelect = document.getElementById('floorSelect');
+    const floorList = document.getElementById('floorList');
+    const deleteBtn = document.getElementById('deleteBtn');
     const drawWallBtn = document.getElementById('drawWallBtn');
     const selectBtn = document.getElementById('selectBtn');
     const drawZoneBtn = document.getElementById('drawZoneBtn');
@@ -39,29 +40,33 @@ window.addEventListener('load', () => {
             distributors: []
         });
         currentFloor = floors[floors.length - 1];
-        updateFloorSelect();
+        updateFloorList();
     }
 
-    function updateFloorSelect() {
-        floorSelect.innerHTML = '';
+    function updateFloorList() {
+        floorList.innerHTML = '';
         floors.forEach((f, idx) => {
-            const opt = document.createElement('option');
-            opt.value = idx;
-            opt.textContent = f.name;
-            floorSelect.appendChild(opt);
+            const li = document.createElement('li');
+            li.textContent = f.name;
+            if (f === currentFloor) li.classList.add('selected');
+            li.addEventListener('click', () => {
+                currentFloor = f;
+                selectedWall = null;
+                selectedZone = null;
+                selectedDistributor = null;
+                updateFloorList();
+                drawAll();
+            });
+            li.addEventListener('dblclick', () => {
+                const n = prompt('Floor name?', f.name);
+                if (n) {
+                    f.name = n;
+                    updateFloorList();
+                }
+            });
+            floorList.appendChild(li);
         });
-        if (currentFloor) {
-            floorSelect.value = floors.indexOf(currentFloor);
-        }
     }
-
-    floorSelect.addEventListener('change', () => {
-        currentFloor = floors[parseInt(floorSelect.value, 10)];
-        selectedWall = null;
-        selectedZone = null;
-        selectedDistributor = null;
-        drawAll();
-    });
 
     addFloorBtn.addEventListener('click', () => {
         const name = prompt('Floor name?', `Floor ${floors.length + 1}`);
@@ -107,6 +112,33 @@ window.addEventListener('load', () => {
 
     panBtn.addEventListener('click', () => {
         mode = 'pan';
+    });
+
+    function deleteSelected() {
+        if (!currentFloor) return;
+        if (selectedWall) {
+            const i = currentFloor.walls.indexOf(selectedWall);
+            if (i >= 0) currentFloor.walls.splice(i, 1);
+            selectedWall = null;
+            lengthInput.value = '';
+        } else if (selectedZone) {
+            const i = currentFloor.zones.indexOf(selectedZone);
+            if (i >= 0) currentFloor.zones.splice(i, 1);
+            selectedZone = null;
+        } else if (selectedDistributor) {
+            const i = currentFloor.distributors.indexOf(selectedDistributor);
+            if (i >= 0) currentFloor.distributors.splice(i, 1);
+            selectedDistributor = null;
+        }
+        drawAll();
+    }
+
+    deleteBtn.addEventListener('click', deleteSelected);
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Delete') {
+            deleteSelected();
+        }
     });
 
     clearBtn.addEventListener('click', () => {
