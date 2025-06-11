@@ -6,14 +6,20 @@ window.addEventListener('load', () => {
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
     const spacingInput = document.getElementById('pipeSpacing');
+    const gridInput = document.getElementById('gridSize');
 
-    const gridSize = 50;
+    let gridSize = parseInt(gridInput.value, 10) || 50;
     let mode = null;
     let rooms = [];
     let distributors = [];
     let startX = 0;
     let startY = 0;
     let drawing = false;
+
+    gridInput.addEventListener('change', () => {
+        gridSize = parseInt(gridInput.value, 10) || 50;
+        drawAll();
+    });
 
     function drawGrid() {
         ctx.strokeStyle = '#ccc';

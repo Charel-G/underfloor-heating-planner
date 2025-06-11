@@ -12,6 +12,11 @@ body {
     margin-right: 5px;
 }
 
+#toolbar input {
+    width: 60px;
+    margin-right: 5px;
+}
+
 #floorPlanCanvas {
     border: 1px solid #333;
 }
