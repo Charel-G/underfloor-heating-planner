@@ -4,12 +4,14 @@ window.addEventListener('load', () => {
     const addFloorBtn = document.getElementById('addFloorBtn');
     const floorSelect = document.getElementById('floorSelect');
     const drawWallBtn = document.getElementById('drawWallBtn');
+    const selectBtn = document.getElementById('selectBtn');
     const drawRoomBtn = document.getElementById('drawRoomBtn');
     const addDistributorBtn = document.getElementById('addDistributorBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
     const spacingInput = document.getElementById('pipeSpacing');
     const gridInput = document.getElementById('gridSize');
+    const lengthInput = document.getElementById('lineLength');
 
     let gridSize = parseInt(gridInput.value, 10) || 50;
     let floors = [];
@@ -18,6 +20,8 @@ window.addEventListener('load', () => {
     let drawing = false;
     let startX = 0;
     let startY = 0;
+    let selectedWall = null;
+    let dragMode = null; // move, end1, end2
 
     function addFloor(name) {
         floors.push({
@@ -61,6 +65,14 @@ window.addEventListener('load', () => {
         mode = 'wall';
     });
 
+    selectBtn.addEventListener('click', () => {
+        mode = 'select';
+        selectedWall = null;
+        lengthInput.value = '';
+        lengthInput.disabled = true;
+        drawAll();
+    });
+
     drawRoomBtn.addEventListener('click', () => {
         mode = 'room';
     });
@@ -80,6 +92,19 @@ window.addEventListener('load', () => {
 
     gridInput.addEventListener('change', () => {
         gridSize = parseInt(gridInput.value, 10) || 50;
+        drawAll();
+    });
+
+    lengthInput.addEventListener('change', () => {
+        if (!selectedWall) return;
+        const len = parseFloat(lengthInput.value);
+        if (isNaN(len)) return;
+        const dx = selectedWall.x2 - selectedWall.x1;
+        const dy = selectedWall.y2 - selectedWall.y1;
+        const current = Math.hypot(dx, dy) || 1;
+        const factor = len / current;
+        selectedWall.x2 = selectedWall.x1 + dx * factor;
+        selectedWall.y2 = selectedWall.y1 + dy * factor;
         drawAll();
     });
 
@@ -104,29 +129,43 @@ window.addEventListener('load', () => {
         ctx.strokeStyle = '#000';
         // walls
         currentFloor.walls.forEach(w => {
+            ctx.strokeStyle = (w === selectedWall) ? 'red' : '#000';
             ctx.beginPath();
             ctx.moveTo(w.x1, w.y1);
             ctx.lineTo(w.x2, w.y2);
             ctx.stroke();
         });
+        ctx.strokeStyle = '#000';
         // zones
+        ctx.fillStyle = 'rgba(0,255,0,0.1)';
         currentFloor.rooms.forEach(r => {
+            ctx.fillRect(r.x, r.y, r.width, r.height);
             ctx.strokeRect(r.x, r.y, r.width, r.height);
+            if (r.name) {
+                ctx.fillStyle = '#000';
+                ctx.fillText(r.name, r.x + 4, r.y + 12);
+                ctx.fillStyle = 'rgba(0,255,0,0.1)';
+            }
         });
         // distributors
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
         currentFloor.distributors.forEach(d => {
             ctx.fillRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
             ctx.strokeRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
+            if (d.name) {
+                ctx.fillStyle = '#000';
+                ctx.fillText(d.name, d.x - d.width / 2 + 2, d.y - d.height / 2 + 12);
+                ctx.fillStyle = 'rgba(0,0,255,0.3)';
+            }
         });
     }
 
     function drawPipes() {
         drawAll();
         if (!currentFloor) return;
-        const spacing = parseInt(spacingInput.value, 10) || gridSize;
         ctx.strokeStyle = 'orange';
         currentFloor.rooms.forEach(room => {
+            const spacing = room.spacing || parseInt(spacingInput.value, 10) || gridSize;
             let leftToRight = true;
             for (let y = room.y + spacing / 2; y < room.y + room.height; y += spacing) {
                 ctx.beginPath();
@@ -144,7 +183,7 @@ window.addEventListener('load', () => {
         // connection lines from distributors to zones
         ctx.strokeStyle = 'blue';
         currentFloor.rooms.forEach(room => {
-            const d = currentFloor.distributors[0];
+            const d = currentFloor.distributors[room.distributorId || 0];
             if (!d) return;
             ctx.beginPath();
             ctx.moveTo(d.x, d.y);
@@ -153,14 +192,70 @@ window.addEventListener('load', () => {
         });
     }
 
+    const SNAP_DIST = 10;
+
     function snapAngle(dx, dy) {
         const angle = Math.atan2(dy, dx);
         const snap = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+        let result = angle;
+        if (Math.abs(angle - snap) < Math.PI / 18) { // ~10 degrees
+            result = snap;
+        }
         const len = Math.sqrt(dx * dx + dy * dy);
         return {
-            dx: Math.cos(snap) * len,
-            dy: Math.sin(snap) * len
+            dx: Math.cos(result) * len,
+            dy: Math.sin(result) * len
         };
+    }
+
+    function snapToPoints(x, y) {
+        let sx = x, sy = y;
+        currentFloor.walls.forEach(w => {
+            const points = [
+                {x: w.x1, y: w.y1},
+                {x: w.x2, y: w.y2},
+                {x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2}
+            ];
+            points.forEach(p => {
+                if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
+                    sx = p.x;
+                    sy = p.y;
+                }
+            });
+        });
+        return {x: sx, y: sy};
+    }
+
+    function wallLength(w) {
+        return Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+    }
+
+    function hitTestWall(x, y) {
+        for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
+            const w = currentFloor.walls[i];
+            if (Math.hypot(w.x1 - x, w.y1 - y) < SNAP_DIST) {
+                return {wall: w, mode: 'end1'};
+            }
+            if (Math.hypot(w.x2 - x, w.y2 - y) < SNAP_DIST) {
+                return {wall: w, mode: 'end2'};
+            }
+            const dist = distanceToSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+            if (dist < SNAP_DIST) {
+                return {wall: w, mode: 'move'};
+            }
+        }
+        return {wall: null};
+    }
+
+    function distanceToSegment(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const lx = x1 + t * dx;
+        const ly = y1 + t * dy;
+        return Math.hypot(px - lx, py - ly);
     }
 
     canvas.addEventListener('mousedown', e => {
@@ -177,6 +272,20 @@ window.addEventListener('load', () => {
             const connections = parseInt(prompt('Connections?', '2'), 10) || 2;
             currentFloor.distributors.push({ x: startX, y: startY, width, height, name, connections });
             drawAll();
+        } else if (mode === 'select') {
+            const hit = hitTestWall(startX, startY);
+            if (hit.wall) {
+                selectedWall = hit.wall;
+                dragMode = hit.mode;
+                drawing = true;
+                lengthInput.disabled = false;
+                lengthInput.value = wallLength(selectedWall).toFixed(0);
+            } else {
+                selectedWall = null;
+                lengthInput.value = '';
+                lengthInput.disabled = true;
+                drawAll();
+            }
         }
     });
 
@@ -188,14 +297,43 @@ window.addEventListener('load', () => {
         drawAll();
         if (mode === 'wall') {
             const snap = snapAngle(x - startX, y - startY);
+            const snapped = snapToPoints(startX + snap.dx, startY + snap.dy);
             ctx.strokeStyle = 'red';
             ctx.beginPath();
             ctx.moveTo(startX, startY);
-            ctx.lineTo(startX + snap.dx, startY + snap.dy);
+            ctx.lineTo(snapped.x, snapped.y);
             ctx.stroke();
         } else if (mode === 'room') {
             ctx.strokeStyle = 'red';
-            ctx.strokeRect(startX, startY, x - startX, y - startY);
+            const snap = snapToPoints(x, y);
+            ctx.strokeRect(startX, startY, snap.x - startX, snap.y - startY);
+        } else if (mode === 'select' && selectedWall) {
+            if (dragMode === 'move') {
+                const dx = x - startX;
+                const dy = y - startY;
+                selectedWall.x1 += dx;
+                selectedWall.y1 += dy;
+                selectedWall.x2 += dx;
+                selectedWall.y2 += dy;
+                startX = x;
+                startY = y;
+                lengthInput.value = wallLength(selectedWall).toFixed(0);
+                drawAll();
+            } else if (dragMode === 'end1' || dragMode === 'end2') {
+                const anchorX = dragMode === 'end1' ? selectedWall.x2 : selectedWall.x1;
+                const anchorY = dragMode === 'end1' ? selectedWall.y2 : selectedWall.y1;
+                const snap = snapAngle(x - anchorX, y - anchorY);
+                const snapped = snapToPoints(anchorX + snap.dx, anchorY + snap.dy);
+                if (dragMode === 'end1') {
+                    selectedWall.x1 = snapped.x;
+                    selectedWall.y1 = snapped.y;
+                } else {
+                    selectedWall.x2 = snapped.x;
+                    selectedWall.y2 = snapped.y;
+                }
+                lengthInput.value = wallLength(selectedWall).toFixed(0);
+                drawAll();
+            }
         }
     });
 
@@ -207,22 +345,37 @@ window.addEventListener('load', () => {
         const y = e.clientY - rect.top;
         if (mode === 'wall') {
             const snap = snapAngle(x - startX, y - startY);
+            const snapped = snapToPoints(startX + snap.dx, startY + snap.dy);
             currentFloor.walls.push({
                 x1: startX,
                 y1: startY,
-                x2: startX + snap.dx,
-                y2: startY + snap.dy
+                x2: snapped.x,
+                y2: snapped.y
             });
         } else if (mode === 'room') {
+            const snap = snapToPoints(x, y);
             const name = prompt('Zone name?', `Zone ${currentFloor.rooms.length + 1}`) || '';
+            const spacing = parseInt(prompt('Pipe spacing?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || gridSize;
+            let distributorId = null;
+            if (currentFloor.distributors.length > 0) {
+                const list = currentFloor.distributors.map((d,i) => `${i}: ${d.name}`).join('\n');
+                const ans = prompt('Distributor index:\n' + list, '0');
+                const idx = parseInt(ans, 10);
+                if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
+            }
             currentFloor.rooms.push({
-                x: Math.min(startX, x),
-                y: Math.min(startY, y),
-                width: Math.abs(x - startX),
-                height: Math.abs(y - startY),
-                name
+                x: Math.min(startX, snap.x),
+                y: Math.min(startY, snap.y),
+                width: Math.abs(snap.x - startX),
+                height: Math.abs(snap.y - startY),
+                name,
+                spacing,
+                distributorId
             });
+        } else if (mode === 'select') {
+            lengthInput.value = selectedWall ? wallLength(selectedWall).toFixed(0) : '';
         }
+        dragMode = null;
         drawAll();
     });
 
