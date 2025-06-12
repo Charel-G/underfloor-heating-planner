@@ -8,6 +8,7 @@ window.addEventListener('load', () => {
     const selectBtn = document.getElementById('selectBtn');
     const drawZoneBtn = document.getElementById('drawZoneBtn');
     const addDistributorBtn = document.getElementById('addDistributorBtn');
+    const addDoorBtn = document.getElementById('addDoorBtn');
     const editDistributorBtn = document.getElementById('editDistributorBtn');
     const panBtn = document.getElementById('panBtn');
     const clearBtn = document.getElementById('clearBtn');
@@ -15,9 +16,11 @@ window.addEventListener('load', () => {
     const spacingInput = document.getElementById('pipeSpacing');
     const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
+    const wallThicknessInput = document.getElementById('wallThickness');
 
     let gridSize = parseFloat(gridInput.value) || 38;
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
+    let defaultWallThickness = 0.25 * pixelsPerMeter;
     let offsetX = 0;
     let offsetY = 0;
     let floors = [];
@@ -29,7 +32,8 @@ window.addEventListener('load', () => {
     let selectedWall = null;
     let selectedZone = null;
     let selectedDistributor = null;
-    let dragMode = null; // move, end1, end2 or moveZone/distributor
+    let selectedDoor = null;
+    let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
 
     function addFloor(name) {
@@ -96,6 +100,10 @@ window.addEventListener('load', () => {
         mode = 'distributor';
     });
 
+    addDoorBtn.addEventListener('click', () => {
+        mode = 'door';
+    });
+
     editDistributorBtn.addEventListener('click', () => {
         if (selectedDistributor) {
             const width = parseFloat(prompt('Width (m)?', (selectedDistributor.width/pixelsPerMeter).toFixed(2)), 10);
@@ -121,6 +129,12 @@ window.addEventListener('load', () => {
             if (i >= 0) currentFloor.walls.splice(i, 1);
             selectedWall = null;
             lengthInput.value = '';
+            wallThicknessInput.value = '';
+            wallThicknessInput.disabled = true;
+        } else if (selectedDoor && selectedWall) {
+            const idx = selectedWall.doors.indexOf(selectedDoor);
+            if (idx >= 0) selectedWall.doors.splice(idx,1);
+            selectedDoor = null;
         } else if (selectedZone) {
             const i = currentFloor.zones.indexOf(selectedZone);
             if (i >= 0) currentFloor.zones.splice(i, 1);
@@ -155,6 +169,7 @@ window.addEventListener('load', () => {
     gridInput.addEventListener('change', () => {
         gridSize = parseFloat(gridInput.value) || 38;
         pixelsPerMeter = gridSize * 2;
+        defaultWallThickness = 0.25 * pixelsPerMeter;
         drawAll();
     });
 
@@ -169,6 +184,14 @@ window.addEventListener('load', () => {
         const factor = target / current;
         selectedWall.x2 = selectedWall.x1 + dx * factor;
         selectedWall.y2 = selectedWall.y1 + dy * factor;
+        drawAll();
+    });
+
+    wallThicknessInput.addEventListener('change', () => {
+        if (!selectedWall) return;
+        const th = parseFloat(wallThicknessInput.value);
+        if (isNaN(th)) return;
+        selectedWall.thickness = th * pixelsPerMeter;
         drawAll();
     });
 
@@ -195,11 +218,7 @@ window.addEventListener('load', () => {
         ctx.strokeStyle = '#000';
         // walls
         currentFloor.walls.forEach(w => {
-            ctx.strokeStyle = (w === selectedWall) ? 'red' : '#000';
-            ctx.beginPath();
-            ctx.moveTo(w.x1, w.y1);
-            ctx.lineTo(w.x2, w.y2);
-            ctx.stroke();
+            drawWall(w, w === selectedWall);
         });
         ctx.strokeStyle = '#000';
         // zones
@@ -335,7 +354,12 @@ window.addEventListener('load', () => {
             }
             const dist = distanceToSegment(x, y, w.x1, w.y1, w.x2, w.y2);
             if (dist < SNAP_DIST) {
-                return {wall: w, mode: 'move'};
+                const t = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+                const along = t * wallLength(w);
+                const doorHit = (w.doors || []).some(d =>
+                    along >= d.offset - d.width/2 && along <= d.offset + d.width/2
+                );
+                if (!doorHit) return {wall: w, mode: 'move'};
             }
         }
         return {wall: null};
@@ -350,6 +374,16 @@ window.addEventListener('load', () => {
         const lx = x1 + t * dx;
         const ly = y1 + t * dy;
         return Math.hypot(px - lx, py - ly);
+    }
+
+    function projectionOnSegment(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return 0;
+        let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        return t;
     }
 
     function zoneBounds(z) {
@@ -383,10 +417,36 @@ window.addEventListener('load', () => {
                (ccw(ax1, ay1, ax2, ay2, bx1, by1) !== ccw(ax1, ay1, ax2, ay2, bx2, by2));
     }
 
+    function lineIntersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+        const dax = ax2 - ax1;
+        const day = ay2 - ay1;
+        const dbx = bx2 - bx1;
+        const dby = by2 - by1;
+        const denom = dax * dby - day * dbx;
+        if (denom === 0) return null;
+        const t1 = ((bx1 - ax1) * dby - (by1 - ay1) * dbx) / denom;
+        const t2 = ((bx1 - ax1) * day - (by1 - ay1) * dax) / denom;
+        if (t1 < 0 || t1 > 1 || t2 < 0 || t2 > 1) return null;
+        return {
+            x: ax1 + t1 * dax,
+            y: ay1 + t1 * day,
+            t1,
+            t2
+        };
+    }
+
     function segmentIntersectsWall(x1, y1, x2, y2) {
-        return currentFloor.walls.some(w =>
-            segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)
-        );
+        for (const w of currentFloor.walls) {
+            if (!segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) continue;
+            const inter = lineIntersection(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2);
+            if (!inter) return true;
+            const along = inter.t2 * wallLength(w);
+            const doorPass = (w.doors || []).some(d =>
+                along >= d.offset - d.width/2 && along <= d.offset + d.width/2
+            );
+            if (!doorPass) return true;
+        }
+        return false;
     }
 
     function floorBounds() {
@@ -529,6 +589,60 @@ window.addEventListener('load', () => {
         }
     }
 
+    function drawWall(w, isSelected) {
+        const dx = w.x2 - w.x1;
+        const dy = w.y2 - w.y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const half = (w.thickness || defaultWallThickness) / 2;
+        const nx = -uy * half;
+        const ny = ux * half;
+        const doors = (w.doors || []).slice().sort((a,b)=> (a.offset - a.width/2) - (b.offset - b.width/2));
+        let last = 0;
+        ctx.fillStyle = '#ccc';
+        ctx.strokeStyle = isSelected ? 'red' : '#000';
+        for (let i=0;i<=doors.length;i++) {
+            const segEnd = i<doors.length ? doors[i].offset - doors[i].width/2 : len;
+            if (segEnd > last) {
+                const sx = w.x1 + ux*last;
+                const sy = w.y1 + uy*last;
+                const ex = w.x1 + ux*segEnd;
+                const ey = w.y1 + uy*segEnd;
+                ctx.beginPath();
+                ctx.moveTo(sx+nx, sy+ny);
+                ctx.lineTo(ex+nx, ey+ny);
+                ctx.lineTo(ex-nx, ey-ny);
+                ctx.lineTo(sx-nx, sy-ny);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+            if (i<doors.length) {
+                const d = doors[i];
+                const ds = d.offset - d.width/2;
+                const de = d.offset + d.width/2;
+                const sx = w.x1 + ux*ds;
+                const sy = w.y1 + uy*ds;
+                const ex = w.x1 + ux*de;
+                const ey = w.y1 + uy*de;
+                ctx.beginPath();
+                ctx.moveTo(sx+nx, sy+ny);
+                ctx.lineTo(ex+nx, ey+ny);
+                ctx.lineTo(ex-nx, ey-ny);
+                ctx.lineTo(sx-nx, sy-ny);
+                ctx.closePath();
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                ctx.strokeStyle = (d === selectedDoor) ? 'orange' : '#000';
+                ctx.stroke();
+                ctx.fillStyle = '#ccc';
+                ctx.strokeStyle = isSelected ? 'red' : '#000';
+                last = de;
+            }
+        }
+    }
+
     function zoneLoopPath(rect, spacing, entry) {
         const path = [{ x: entry.x, y: entry.y }];
         let y = rect.y + spacing / 2;
@@ -576,6 +690,25 @@ window.addEventListener('load', () => {
         return null;
     }
 
+    function hitTestDoor(x, y) {
+        for (let wi = currentFloor.walls.length - 1; wi >= 0; wi--) {
+            const w = currentFloor.walls[wi];
+            const len = wallLength(w);
+            const ux = (w.x2 - w.x1) / len;
+            const uy = (w.y2 - w.y1) / len;
+            const perp = Math.abs((x - w.x1) * -uy + (y - w.y1) * ux);
+            if (perp > (w.thickness || defaultWallThickness) / 2 + SNAP_DIST) continue;
+            const proj = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2) * len;
+            for (let di = (w.doors||[]).length -1; di >=0; di--) {
+                const d = w.doors[di];
+                if (proj >= d.offset - d.width/2 - SNAP_DIST && proj <= d.offset + d.width/2 + SNAP_DIST) {
+                    return {wall:w, door:d};
+                }
+            }
+        }
+        return null;
+    }
+
     canvas.addEventListener('mousedown', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
@@ -609,23 +742,47 @@ window.addEventListener('load', () => {
             const connections = parseInt(prompt('Connections?', '2'), 10) || 2;
             currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
             drawAll();
+        } else if (mode === 'door') {
+            const hit = hitTestWall(startX, startY);
+            if (hit.wall) {
+                const w = hit.wall;
+                const len = wallLength(w);
+                const proj = projectionOnSegment(startX, startY, w.x1, w.y1, w.x2, w.y2) * len;
+                const door = { offset: proj, width: 1 * pixelsPerMeter };
+                w.doors = w.doors || [];
+                w.doors.push(door);
+                drawAll();
+            }
         } else if (mode === 'select') {
             const hit = hitTestWall(startX, startY);
             if (hit.wall) {
                 selectedWall = hit.wall;
                 selectedZone = null;
                 selectedDistributor = null;
+                selectedDoor = null;
                 dragMode = hit.mode;
                 drawing = true;
                 lengthInput.disabled = false;
                 lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
+                wallThicknessInput.disabled = false;
+                wallThicknessInput.value = (selectedWall.thickness||defaultWallThickness)/pixelsPerMeter;
             } else {
                 selectedWall = null;
                 lengthInput.value = '';
                 lengthInput.disabled = true;
+                wallThicknessInput.value = '';
+                wallThicknessInput.disabled = true;
                 const r = hitTestZone(startX, startY);
                 const d = hitTestDistributor(startX, startY);
-                if (r) {
+                const doorHit = hitTestDoor(startX, startY);
+                if (doorHit) {
+                    selectedWall = doorHit.wall;
+                    selectedDoor = doorHit.door;
+                    dragMode = 'moveDoor';
+                    drawing = true;
+                    wallThicknessInput.disabled = false;
+                    wallThicknessInput.value = (selectedWall.thickness||defaultWallThickness)/pixelsPerMeter;
+                } else if (r) {
                     selectedZone = r;
                     selectedDistributor = null;
                     dragMode = 'moveZone';
@@ -638,6 +795,7 @@ window.addEventListener('load', () => {
                 } else {
                     selectedZone = null;
                     selectedDistributor = null;
+                    selectedDoor = null;
                     drawAll();
                 }
             }
@@ -727,6 +885,14 @@ window.addEventListener('load', () => {
             startX = x;
             startY = y;
             drawAll();
+        } else if (mode === 'select' && selectedDoor && dragMode === 'moveDoor') {
+            const w = selectedWall;
+            const len = wallLength(w);
+            const proj = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2) * len;
+            selectedDoor.offset = proj;
+            startX = x;
+            startY = y;
+            drawAll();
         }
     });
 
@@ -749,7 +915,9 @@ window.addEventListener('load', () => {
                 x1: startX,
                 y1: startY,
                 x2: snapped.x,
-                y2: snapped.y
+                y2: snapped.y,
+                thickness: defaultWallThickness,
+                doors: []
             });
         } else if (mode === 'zone') {
             if (!zoneDrawing) return;
@@ -797,6 +965,7 @@ window.addEventListener('load', () => {
         const y = pos.y;
         const r = hitTestZone(x, y);
         const d = hitTestDistributor(x, y);
+        const doorHit = hitTestDoor(x, y);
         if (r) {
             r.name = prompt('Zone name?', r.name || '') || r.name;
             const spacingMm = parseInt(prompt('Pipe spacing (mm)?', Math.round(r.spacing / pixelsPerMeter * 1000)), 10);
@@ -816,6 +985,10 @@ window.addEventListener('load', () => {
             if (!isNaN(width)) d.width = width * pixelsPerMeter;
             if (!isNaN(height)) d.height = height * pixelsPerMeter;
             if (!isNaN(connections)) d.connections = connections;
+            drawAll();
+        } else if (doorHit) {
+            const newWidth = parseFloat(prompt('Door width (m)?', (doorHit.door.width / pixelsPerMeter).toFixed(2)), 10);
+            if (!isNaN(newWidth)) doorHit.door.width = newWidth * pixelsPerMeter;
             drawAll();
         }
     });
