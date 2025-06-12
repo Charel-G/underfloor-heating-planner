@@ -42,7 +42,9 @@ window.addEventListener('load', () => {
 
     function resizeCanvas() {
         canvas.width = canvasPanel.clientWidth;
-        const h = window.innerHeight - header.offsetHeight - toolbar.offsetHeight - 20;
+        const bodyStyles = getComputedStyle(document.body);
+        const paddingY = parseFloat(bodyStyles.paddingTop) + parseFloat(bodyStyles.paddingBottom);
+        const h = window.innerHeight - header.offsetHeight - toolbar.offsetHeight - paddingY;
         canvas.height = h > 0 ? h : 300;
         drawAll();
     }
