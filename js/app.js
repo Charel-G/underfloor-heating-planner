@@ -464,16 +464,35 @@ window.addEventListener('load', () => {
         };
     }
 
+    function doorOpenAt(w, along) {
+        return (w.doors || []).some(d =>
+            along >= d.offset - d.width/2 && along <= d.offset + d.width/2
+        );
+    }
+
     function segmentIntersectsWall(x1, y1, x2, y2) {
         for (const w of currentFloor.walls) {
-            if (!segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) continue;
-            const inter = lineIntersection(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2);
-            if (!inter) return true;
-            const along = inter.t2 * wallLength(w);
-            const doorPass = (w.doors || []).some(d =>
-                along >= d.offset - d.width/2 && along <= d.offset + d.width/2
-            );
-            if (!doorPass) return true;
+            const thick = (w.thickness || defaultWallThickness);
+            const len = wallLength(w);
+
+            if (segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) {
+                const inter = lineIntersection(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2);
+                const along = inter ? inter.t2 * len : projectionOnSegment(x1, y1, w.x1, w.y1, w.x2, w.y2) * len;
+                if (!doorOpenAt(w, along)) return true;
+            }
+
+            const pts = [
+                {x:x1,y:y1},
+                {x:x2,y:y2},
+                {x:(x1+x2)/2, y:(y1+y2)/2}
+            ];
+            for (const p of pts) {
+                const dist = distanceToSegment(p.x, p.y, w.x1, w.y1, w.x2, w.y2);
+                const along = projectionOnSegment(p.x, p.y, w.x1, w.y1, w.x2, w.y2) * len;
+                if (dist < thick/2 && along >= 0 && along <= len && !doorOpenAt(w, along)) {
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -679,20 +698,31 @@ window.addEventListener('load', () => {
     // vertically.
     function zoneLoopPath(rect, spacing, entry) {
         const path = [{ x: entry.x, y: entry.y }];
+        const inner = {
+            x: rect.x + spacing,
+            y: rect.y + spacing,
+            width: rect.width - spacing * 2,
+            height: rect.height - spacing * 2
+        };
+        if (inner.width <= 0 || inner.height <= 0) {
+            path.push({ x: entry.x, y: entry.y });
+            return path;
+        }
         const eps = spacing / 2;
         const onTop = Math.abs(entry.y - rect.y) < eps;
         const onBottom = Math.abs(entry.y - (rect.y + rect.height)) < eps;
         const horizontal = onTop || onBottom;
 
         if (horizontal) {
-            // Start drawing rows from the entry side and move across the zone
+            const startY = onTop ? inner.y : inner.y + inner.height;
+            path.push({ x: entry.x, y: startY });
+            let y = startY;
             let dirRight = onTop ? true : false;
-            let y = entry.y;
             while (true) {
-                const targetX = dirRight ? rect.x + rect.width : rect.x;
+                const targetX = dirRight ? inner.x + inner.width : inner.x;
                 path.push({ x: targetX, y });
                 const nextY = onTop ? y + spacing : y - spacing;
-                if (nextY < rect.y + eps || nextY > rect.y + rect.height - eps) {
+                if (nextY < inner.y || nextY > inner.y + inner.height) {
                     break;
                 }
                 path.push({ x: targetX, y: nextY });
@@ -700,14 +730,15 @@ window.addEventListener('load', () => {
                 dirRight = !dirRight;
             }
         } else {
-            // Entry is on the left or right; draw vertical columns
+            const startX = entry.x === rect.x ? inner.x : inner.x + inner.width;
+            path.push({ x: startX, y: entry.y });
+            let x = startX;
             let dirDown = entry.x === rect.x;
-            let x = entry.x;
             while (true) {
-                const targetY = dirDown ? rect.y + rect.height : rect.y;
+                const targetY = dirDown ? inner.y + inner.height : inner.y;
                 path.push({ x, y: targetY });
                 const nextX = entry.x === rect.x ? x + spacing : x - spacing;
-                if (nextX < rect.x + eps || nextX > rect.x + rect.width - eps) {
+                if (nextX < inner.x || nextX > inner.x + inner.width) {
                     break;
                 }
                 path.push({ x: nextX, y: targetY });

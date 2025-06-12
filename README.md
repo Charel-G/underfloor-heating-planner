@@ -21,6 +21,7 @@ the distributor so no second loop is drawn inside the zone.
 - Rectangular distributors with editable size, name and pipe connections
 - Zones drawn as polygons assigned to a distributor and spacing
 - Automatic supply and return routing with serpentine filling
+- Pipes respect wall thickness and keep the loop one spacing away from zone edges
 
 ## Usage
 
