@@ -249,35 +249,19 @@ window.addEventListener('load', () => {
         if (!currentFloor) return;
         ctx.save();
         ctx.translate(offsetX, offsetY);
-        ctx.strokeStyle = 'orange';
         currentFloor.zones.forEach(room => {
             const rect = zoneBounds(room);
             const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
             const spacing = room.spacing || defSpacing || gridSize;
-            let leftToRight = true;
-            for (let y = rect.y + spacing / 2; y < rect.y + rect.height; y += spacing) {
-                ctx.beginPath();
-                if (leftToRight) {
-                    ctx.moveTo(rect.x, y);
-                    ctx.lineTo(rect.x + rect.width, y);
-                } else {
-                    ctx.moveTo(rect.x + rect.width, y);
-                    ctx.lineTo(rect.x, y);
-                }
-                ctx.stroke();
-                leftToRight = !leftToRight;
-            }
-        });
-        // connection lines from distributors to zones
-        ctx.strokeStyle = 'blue';
-        currentFloor.zones.forEach(room => {
-            const rect = zoneBounds(room);
-            const d = currentFloor.distributors[room.distributorId || 0];
-            if (!d) return;
-            ctx.beginPath();
-            ctx.moveTo(d.x, d.y);
-            ctx.lineTo(rect.x + rect.width / 2, rect.y + rect.height / 2);
-            ctx.stroke();
+            const dist = currentFloor.distributors[room.distributorId || 0];
+            if (!dist) return;
+
+            const target = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+            const path = findPath({x: dist.x, y: dist.y}, target);
+            drawPipePath(path, 'red', 0); // supply
+            drawPipePath(path.slice().reverse(), 'blue', 4); // return line offset
+
+            drawZonePattern(rect, spacing);
         });
         ctx.restore();
     }
@@ -381,6 +365,84 @@ window.addEventListener('load', () => {
             if (intersect) inside = !inside;
         }
         return inside;
+    }
+
+    function segmentsIntersect(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+        function ccw(x1, y1, x2, y2, x3, y3) {
+            return (y3 - y1) * (x2 - x1) > (y2 - y1) * (x3 - x1);
+        }
+        return (ccw(ax1, ay1, bx1, by1, bx2, by2) !== ccw(ax2, ay2, bx1, by1, bx2, by2)) &&
+               (ccw(ax1, ay1, ax2, ay2, bx1, by1) !== ccw(ax1, ay1, ax2, ay2, bx2, by2));
+    }
+
+    function segmentIntersectsWall(x1, y1, x2, y2) {
+        return currentFloor.walls.some(w =>
+            segmentsIntersect(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)
+        );
+    }
+
+    function findPath(start, end) {
+        const step = gridSize;
+        const sx = Math.round(start.x / step) * step;
+        const sy = Math.round(start.y / step) * step;
+        const gx = Math.round(end.x / step) * step;
+        const gy = Math.round(end.y / step) * step;
+        const queue = [{ x: sx, y: sy, path: [{ x: start.x, y: start.y }] }];
+        const visited = new Set([`${sx},${sy}`]);
+        const dirs = [
+            [step, 0], [-step, 0], [0, step], [0, -step]
+        ];
+        while (queue.length) {
+            const n = queue.shift();
+            if (n.x === gx && n.y === gy) {
+                n.path.push({ x: end.x, y: end.y });
+                return n.path;
+            }
+            for (const [dx, dy] of dirs) {
+                const nx = n.x + dx;
+                const ny = n.y + dy;
+                const key = `${nx},${ny}`;
+                if (visited.has(key)) continue;
+                if (segmentIntersectsWall(n.x, n.y, nx, ny)) continue;
+                visited.add(key);
+                queue.push({ x: nx, y: ny, path: n.path.concat([{ x: nx, y: ny }]) });
+            }
+        }
+        return [{ x: start.x, y: start.y }, { x: end.x, y: end.y }];
+    }
+
+    function drawPipePath(path, color, offset) {
+        ctx.strokeStyle = color;
+        for (let i = 0; i < path.length - 1; i++) {
+            const p1 = path[i];
+            const p2 = path[i + 1];
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ox = -dy / len * offset;
+            const oy = dx / len * offset;
+            ctx.beginPath();
+            ctx.moveTo(p1.x + ox, p1.y + oy);
+            ctx.lineTo(p2.x + ox, p2.y + oy);
+            ctx.stroke();
+        }
+    }
+
+    function drawZonePattern(rect, spacing) {
+        ctx.strokeStyle = 'orange';
+        let leftToRight = true;
+        for (let y = rect.y + spacing / 2; y < rect.y + rect.height; y += spacing) {
+            ctx.beginPath();
+            if (leftToRight) {
+                ctx.moveTo(rect.x, y);
+                ctx.lineTo(rect.x + rect.width, y);
+            } else {
+                ctx.moveTo(rect.x + rect.width, y);
+                ctx.lineTo(rect.x, y);
+            }
+            ctx.stroke();
+            leftToRight = !leftToRight;
+        }
     }
 
     function screenToWorld(x, y) {
