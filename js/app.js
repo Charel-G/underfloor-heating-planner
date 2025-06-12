@@ -1,6 +1,9 @@
 window.addEventListener('load', () => {
     const canvas = document.getElementById('floorPlanCanvas');
     const ctx = canvas.getContext('2d');
+    const header = document.querySelector('h1');
+    const canvasPanel = document.getElementById('canvasPanel');
+    const toolbar = document.getElementById('toolbar');
     const addFloorBtn = document.getElementById('addFloorBtn');
     const floorList = document.getElementById('floorList');
     const deleteBtn = document.getElementById('deleteBtn');
@@ -36,6 +39,15 @@ window.addEventListener('load', () => {
     let selectedDoor = null;
     let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
+
+    function resizeCanvas() {
+        canvas.width = canvasPanel.clientWidth;
+        const h = window.innerHeight - header.offsetHeight - toolbar.offsetHeight - 20;
+        canvas.height = h > 0 ? h : 300;
+        drawAll();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
 
     function addFloor(name) {
         floors.push({
@@ -1165,5 +1177,5 @@ window.addEventListener('load', () => {
 
     // initialise with one floor
     addFloor('Floor 1');
-    drawAll();
+    resizeCanvas();
 });
