@@ -645,24 +645,56 @@ window.addEventListener('load', () => {
         }
     }
 
+    // Create a serpentine loop that starts at the entry point and
+    // fills the zone before returning to the entry. The orientation of
+    // the loop depends on which wall the entry touches. If the entry is
+    // on the top or bottom, rows run horizontally; otherwise columns run
+    // vertically.
     function zoneLoopPath(rect, spacing, entry) {
         const path = [{ x: entry.x, y: entry.y }];
-        let y = rect.y + spacing / 2;
-        let leftToRight = true;
-        while (y <= rect.y + rect.height - spacing / 2) {
-            if (leftToRight) {
-                path.push({ x: rect.x + rect.width, y });
-            } else {
-                path.push({ x: rect.x, y });
+        const eps = spacing / 2;
+        const onTop = Math.abs(entry.y - rect.y) < eps;
+        const onBottom = Math.abs(entry.y - (rect.y + rect.height)) < eps;
+        const horizontal = onTop || onBottom;
+
+        if (horizontal) {
+            // Start drawing rows from the entry side and move across the zone
+            let dirRight = onTop ? true : false;
+            let y = entry.y;
+            while (true) {
+                const targetX = dirRight ? rect.x + rect.width : rect.x;
+                path.push({ x: targetX, y });
+                const nextY = onTop ? y + spacing : y - spacing;
+                if (nextY < rect.y + eps || nextY > rect.y + rect.height - eps) {
+                    break;
+                }
+                path.push({ x: targetX, y: nextY });
+                y = nextY;
+                dirRight = !dirRight;
             }
-            leftToRight = !leftToRight;
-            if (y + spacing <= rect.y + rect.height - spacing / 2) {
-                path.push({ x: path[path.length - 1].x, y: y + spacing });
+        } else {
+            // Entry is on the left or right; draw vertical columns
+            let dirDown = entry.x === rect.x;
+            let x = entry.x;
+            while (true) {
+                const targetY = dirDown ? rect.y + rect.height : rect.y;
+                path.push({ x, y: targetY });
+                const nextX = entry.x === rect.x ? x + spacing : x - spacing;
+                if (nextX < rect.x + eps || nextX > rect.x + rect.width - eps) {
+                    break;
+                }
+                path.push({ x: nextX, y: targetY });
+                x = nextX;
+                dirDown = !dirDown;
             }
-            y += spacing;
         }
-        path.push({ x: entry.x, y: path[path.length - 1].y });
-        path.push({ x: entry.x, y: entry.y });
+
+        // Return to the entry point to close the circuit
+        const last = path[path.length - 1];
+        if (last.x !== entry.x || last.y !== entry.y) {
+            path.push({ x: entry.x, y: last.y });
+            path.push({ x: entry.x, y: entry.y });
+        }
         return path;
     }
 
