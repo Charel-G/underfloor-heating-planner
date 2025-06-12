@@ -1,0 +1,54 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+#main {
+    display: flex;
+}
+
+#floorPanel {
+    width: 180px;
+    margin-right: 10px;
+}
+
+#floorPanel button {
+    display: block;
+    margin-bottom: 5px;
+}
+
+#floorList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid #333;
+    height: 600px;
+    overflow-y: auto;
+}
+
+#floorList li {
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+#floorList li.selected {
+    background: #ddd;
+}
+
+#toolbar {
+    margin-bottom: 10px;
+}
+
+#toolbar button {
+    margin-right: 5px;
+}
+
+#toolbar input {
+    width: 60px;
+    margin-right: 5px;
+}
+
+#floorPlanCanvas {
+    border: 1px solid #333;
+}
