@@ -19,6 +19,8 @@ the distributor so no second loop is drawn inside the zone.
 - Walls have adjustable thickness (default 0.25 m) and doorways can be dropped onto walls
 - Nearby wall endpoints automatically join to remove small gaps
 - Adjacent walls blend together so their thickness appears continuous
+- Joints between walls are squared off automatically; use **Fix Wall Joints** to
+  recompute them manually
 - Rectangular distributors with editable size, name and pipe connections
 - Zones drawn as polygons assigned to a distributor and spacing
 - Automatic supply and return routing with serpentine filling
@@ -31,7 +33,7 @@ The **Draw Wall** tool creates snapping lines. Use **Draw Zone** to trace around
 
 Walls are drawn with a default thickness of 0.25 m. When a wall is selected, the **Wall Thickness** input allows you to change this value. The **Add Door** tool places a doorway onto a wall; doors snap to the wall’s centre line and can be repositioned with the select tool or resized by double‑clicking them.
 
-The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. Adjust the grid size input if needed. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas. Click **Draw Pipes** to automatically route supply and return pipes and fill each zone. **Clear** removes all items from the current floor.
+The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. Adjust the grid size input if needed. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas. Click **Draw Pipes** to automatically route supply and return pipes and fill each zone. Use **Fix Wall Joints** if corners don't connect correctly. **Clear** removes all items from the current floor.
 
 You can simply open `index.html` in your browser or run a small local server
 with Python:

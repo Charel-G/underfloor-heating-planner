@@ -13,6 +13,7 @@ window.addEventListener('load', () => {
     const panBtn = document.getElementById('panBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
+    const fixWallsBtn = document.getElementById('fixWallsBtn');
     const spacingInput = document.getElementById('pipeSpacing');
     const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
@@ -800,20 +801,38 @@ window.addEventListener('load', () => {
         const joints = {};
         currentFloor.walls.forEach(w => {
             const thick = w.thickness || defaultWallThickness;
-            [[w.x1, w.y1], [w.x2, w.y2]].forEach(pt => {
-                const key = pt[0] + ',' + pt[1];
-                if (!joints[key]) joints[key] = { x: pt[0], y: pt[1], count: 0, thick: 0 };
-                joints[key].count++;
-                joints[key].thick = Math.max(joints[key].thick, thick);
+            [
+                { x: w.x1, y: w.y1, ox: w.x2, oy: w.y2, thick },
+                { x: w.x2, y: w.y2, ox: w.x1, oy: w.y1, thick }
+            ].forEach(pt => {
+                const key = pt.x + ',' + pt.y;
+                if (!joints[key]) joints[key] = { x: pt.x, y: pt.y, segs: [] };
+                joints[key].segs.push(pt);
             });
         });
         ctx.fillStyle = '#ccc';
         ctx.strokeStyle = '#000';
         for (const key in joints) {
             const j = joints[key];
-            if (j.count > 1) {
+            if (j.segs.length > 1) {
+                const pts = [];
+                j.segs.forEach(s => {
+                    const dx = s.ox - s.x;
+                    const dy = s.oy - s.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const ux = dx / len;
+                    const uy = dy / len;
+                    const half = s.thick / 2;
+                    pts.push({ x: j.x - uy * half, y: j.y + ux * half });
+                    pts.push({ x: j.x + uy * half, y: j.y - ux * half });
+                });
+                pts.sort((a, b) => Math.atan2(a.y - j.y, a.x - j.x) - Math.atan2(b.y - j.y, b.x - j.x));
                 ctx.beginPath();
-                ctx.arc(j.x, j.y, j.thick / 2, 0, Math.PI * 2);
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) {
+                    ctx.lineTo(pts[i].x, pts[i].y);
+                }
+                ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
             }
@@ -1111,6 +1130,7 @@ window.addEventListener('load', () => {
     });
 
     drawPipesBtn.addEventListener('click', drawPipes);
+    fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
     canvas.addEventListener('dblclick', e => {
         if (!currentFloor) return;
