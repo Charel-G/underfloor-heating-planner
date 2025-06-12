@@ -184,6 +184,7 @@ window.addEventListener('load', () => {
         const factor = target / current;
         selectedWall.x2 = selectedWall.x1 + dx * factor;
         selectedWall.y2 = selectedWall.y1 + dy * factor;
+        connectWalls();
         drawAll();
     });
 
@@ -313,19 +314,44 @@ window.addEventListener('load', () => {
 
     function snapToPoints(x, y) {
         let sx = x, sy = y;
+
+        // grid snapping
+        const gx = Math.round(x / gridSize) * gridSize;
+        const gy = Math.round(y / gridSize) * gridSize;
+        if (Math.hypot(gx - x, gy - y) < SNAP_DIST) {
+            sx = gx;
+            sy = gy;
+        }
+
+        // snap to wall points
         currentFloor.walls.forEach(w => {
-            const points = [
-                {x: w.x1, y: w.y1},
-                {x: w.x2, y: w.y2},
-                {x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2}
+            const pts = [
+                { x: w.x1, y: w.y1 },
+                { x: w.x2, y: w.y2 },
+                { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 }
             ];
-            points.forEach(p => {
+            pts.forEach(p => {
                 if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
                     sx = p.x;
                     sy = p.y;
                 }
             });
         });
+
+        // snap to intersection points
+        for (let i = 0; i < currentFloor.walls.length; i++) {
+            for (let j = i + 1; j < currentFloor.walls.length; j++) {
+                const a = currentFloor.walls[i];
+                const b = currentFloor.walls[j];
+                const inter = lineIntersection(a.x1, a.y1, a.x2, a.y2, b.x1, b.y1, b.x2, b.y2);
+                if (inter && Math.hypot(inter.x - x, inter.y - y) < SNAP_DIST) {
+                    sx = inter.x;
+                    sy = inter.y;
+                }
+            }
+        }
+
+        // snap to zone vertices
         currentFloor.zones.forEach(z => {
             z.points.forEach(p => {
                 if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
@@ -334,7 +360,8 @@ window.addEventListener('load', () => {
                 }
             });
         });
-        return {x: sx, y: sy};
+
+        return { x: sx, y: sy };
     }
 
     function wallLength(w) {
@@ -698,6 +725,45 @@ window.addEventListener('load', () => {
         return path;
     }
 
+    // Adjust wall endpoints so nearby walls meet seamlessly
+    function connectWalls() {
+        if (!currentFloor) return;
+        const thresh = SNAP_DIST;
+        for (let i = 0; i < currentFloor.walls.length; i++) {
+            const a = currentFloor.walls[i];
+            const endpoints = [
+                { key: 'x1', keyy: 'y1' },
+                { key: 'x2', keyy: 'y2' }
+            ];
+            endpoints.forEach(ep => {
+                let ex = a[ep.key];
+                let ey = a[ep.keyy];
+                for (let j = 0; j < currentFloor.walls.length; j++) {
+                    if (i === j) continue;
+                    const b = currentFloor.walls[j];
+                    // snap to other wall endpoints
+                    const pts = [ {x:b.x1,y:b.y1}, {x:b.x2,y:b.y2} ];
+                    pts.forEach(p => {
+                        if (Math.hypot(p.x - ex, p.y - ey) < thresh) {
+                            ex = p.x;
+                            ey = p.y;
+                        }
+                    });
+                    // snap to nearest point on wall segment
+                    const t = projectionOnSegment(ex, ey, b.x1, b.y1, b.x2, b.y2);
+                    const px = b.x1 + (b.x2 - b.x1) * t;
+                    const py = b.y1 + (b.y2 - b.y1) * t;
+                    if (Math.hypot(px - ex, py - ey) < thresh) {
+                        ex = px;
+                        ey = py;
+                    }
+                }
+                a[ep.key] = ex;
+                a[ep.keyy] = ey;
+            });
+        }
+    }
+
 
     function screenToWorld(x, y) {
         return { x: x - offsetX, y: y - offsetY };
@@ -984,6 +1050,7 @@ window.addEventListener('load', () => {
             lengthInput.value = selectedWall ? wallLengthMeters(selectedWall).toFixed(2) : '';
         }
         dragMode = null;
+        connectWalls();
         drawAll();
     });
 
