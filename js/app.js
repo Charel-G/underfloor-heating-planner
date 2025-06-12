@@ -516,7 +516,8 @@ window.addEventListener('load', () => {
 
     function floorBounds() {
         if (!currentFloor || currentFloor.walls.length === 0) {
-            return { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 };
+            const range = 500 * pixelsPerMeter; // allow ~1 km square area
+            return { minX: -range, maxX: range, minY: -range, maxY: range };
         }
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         currentFloor.walls.forEach(w => {
