@@ -1,6 +1,7 @@
 # Underfloor Heating Planner
 
 This project contains a small HTML5 application for planning underfloor heating layouts. It supports multiple floors, walls with angle and point snapping, draggable lines with editable lengths, rectangular distributors and polygonal zones assigned to distributors. The application can automatically route supply and return pipes from distributors to zones using horizontal and vertical segments that avoid walls when possible.
+The routing algorithm now estimates a search radius from the distributor to the furthest wall so that pipe paths stay within the building outline.
 
 ## Usage
 

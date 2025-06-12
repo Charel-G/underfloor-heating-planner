@@ -381,8 +381,40 @@ window.addEventListener('load', () => {
         );
     }
 
+    function floorBounds() {
+        if (!currentFloor || currentFloor.walls.length === 0) {
+            return { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 };
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        currentFloor.walls.forEach(w => {
+            minX = Math.min(minX, w.x1, w.x2);
+            minY = Math.min(minY, w.y1, w.y2);
+            maxX = Math.max(maxX, w.x1, w.x2);
+            maxY = Math.max(maxY, w.y1, w.y2);
+        });
+        return { minX, maxX, minY, maxY };
+    }
+
+    function farthestWallDistance(pt) {
+        const b = floorBounds();
+        const corners = [
+            { x: b.minX, y: b.minY },
+            { x: b.minX, y: b.maxY },
+            { x: b.maxX, y: b.minY },
+            { x: b.maxX, y: b.maxY }
+        ];
+        let max = 0;
+        corners.forEach(c => {
+            const d = Math.hypot(c.x - pt.x, c.y - pt.y);
+            if (d > max) max = d;
+        });
+        return max;
+    }
+
     function findPath(start, end) {
         const step = gridSize;
+        const bounds = floorBounds();
+        const limit = farthestWallDistance(start) + step * 4;
         const sx = Math.round(start.x / step) * step;
         const sy = Math.round(start.y / step) * step;
         const gx = Math.round(end.x / step) * step;
@@ -404,6 +436,10 @@ window.addEventListener('load', () => {
                 const key = `${nx},${ny}`;
                 if (visited.has(key)) continue;
                 if (segmentIntersectsWall(n.x, n.y, nx, ny)) continue;
+                if (nx < bounds.minX - step || nx > bounds.maxX + step || ny < bounds.minY - step || ny > bounds.maxY + step)
+                    continue;
+                if (Math.hypot(nx - start.x, ny - start.y) > limit)
+                    continue;
                 visited.add(key);
                 queue.push({ x: nx, y: ny, path: n.path.concat([{ x: nx, y: ny }]) });
             }
