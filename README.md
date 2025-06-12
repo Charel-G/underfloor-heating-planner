@@ -6,8 +6,9 @@ distributor rectangles and automatic pipe routing.
 Pipes are drawn from each distributor to its zones using an A* search that
 explores eight directions. Diagonal steps are straightened into horizontal and
 vertical segments so the pipes never run at odd angles or through walls.
-After reaching the zone, a serpentine loop is drawn inside it and the return
-line follows the supply path back to the distributor.
+After reaching the zone, only the supply line traces a serpentine loop inside
+the zone. When the loop returns to the entry point, the return line retraces
+the same route back to the distributor so no second loop is drawn.
 
 ## Features
 

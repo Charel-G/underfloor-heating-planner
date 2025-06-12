@@ -282,13 +282,15 @@ window.addEventListener('load', () => {
             if (!dist) return;
 
             const entry = closestPointOnRect(rect, dist.x, dist.y);
-            let path = findPath({ x: dist.x, y: dist.y }, entry);
-            path = expandDiagonals(path);
+            let toEntry = findPath({ x: dist.x, y: dist.y }, entry);
+            toEntry = expandDiagonals(toEntry);
             const zonePath = zoneLoopPath(rect, spacing, entry);
-            const returnPath = expandDiagonals(findPath(entry, { x: dist.x, y: dist.y }));
 
-            drawPipePath(path.concat(zonePath), 'red', 0);
-            drawPipePath(zonePath.slice().reverse().concat(returnPath), 'blue', 4);
+            const supplyPath = toEntry.concat(zonePath);
+            const returnPath = toEntry.slice().reverse();
+
+            drawPipePath(supplyPath, 'red', 0);
+            drawPipePath(returnPath, 'blue', 4);
         });
         ctx.restore();
     }
