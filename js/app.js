@@ -244,24 +244,30 @@ window.addEventListener('load', () => {
         ctx.restore();
     }
 
+    function closestPointOnRect(rect, x, y) {
+        const cx = Math.max(rect.x, Math.min(x, rect.x + rect.width));
+        const cy = Math.max(rect.y, Math.min(y, rect.y + rect.height));
+        return { x: cx, y: cy };
+    }
+
     function drawPipes() {
         drawAll();
         if (!currentFloor) return;
         ctx.save();
         ctx.translate(offsetX, offsetY);
-        currentFloor.zones.forEach(room => {
-            const rect = zoneBounds(room);
+        currentFloor.zones.forEach(zone => {
+            const rect = zoneBounds(zone);
             const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
-            const spacing = room.spacing || defSpacing || gridSize;
-            const dist = currentFloor.distributors[room.distributorId || 0];
+            const spacing = zone.spacing || defSpacing || gridSize;
+            const dist = currentFloor.distributors[zone.distributorId || 0];
             if (!dist) return;
 
-            const target = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-            const path = findPath({x: dist.x, y: dist.y}, target);
-            drawPipePath(path, 'red', 0); // supply
-            drawPipePath(path.slice().reverse(), 'blue', 4); // return line offset
-
+            const entry = closestPointOnRect(rect, dist.x, dist.y);
+            const path = findPath({ x: dist.x, y: dist.y }, entry);
+            drawPipePath(path, 'red', 0);
             drawZonePattern(rect, spacing);
+            const returnPath = findPath(entry, { x: dist.x, y: dist.y });
+            drawPipePath(returnPath, 'blue', 4);
         });
         ctx.restore();
     }
@@ -411,24 +417,47 @@ window.addEventListener('load', () => {
         return max;
     }
 
+    function lineClear(a, b) {
+        return !segmentIntersectsWall(a.x, a.y, b.x, b.y);
+    }
+
+    function simplifyPath(path) {
+        if (path.length <= 2) return path;
+        const out = [path[0]];
+        let prevDx = path[1].x - path[0].x;
+        let prevDy = path[1].y - path[0].y;
+        for (let i = 1; i < path.length - 1; i++) {
+            const dx = path[i + 1].x - path[i].x;
+            const dy = path[i + 1].y - path[i].y;
+            if (dx * prevDy !== dy * prevDx) {
+                out.push(path[i]);
+                prevDx = dx;
+                prevDy = dy;
+            }
+        }
+        out.push(path[path.length - 1]);
+        return out;
+    }
+
     function findPath(start, end) {
         const step = gridSize;
         const bounds = floorBounds();
+        if (lineClear(start, end)) return [start, end];
         const limit = farthestWallDistance(start) + step * 4;
         const sx = Math.round(start.x / step) * step;
         const sy = Math.round(start.y / step) * step;
         const gx = Math.round(end.x / step) * step;
         const gy = Math.round(end.y / step) * step;
-        const queue = [{ x: sx, y: sy, path: [{ x: start.x, y: start.y }] }];
+        const open = [{ x: sx, y: sy, g: 0, path: [{ x: start.x, y: start.y }] }];
         const visited = new Set([`${sx},${sy}`]);
-        const dirs = [
-            [step, 0], [-step, 0], [0, step], [0, -step]
-        ];
-        while (queue.length) {
-            const n = queue.shift();
+        const dirs = [ [step,0], [-step,0], [0,step], [0,-step] ];
+        function heuristic(x,y) { return Math.abs(x - gx) + Math.abs(y - gy); }
+        while (open.length) {
+            open.sort((a,b)=> (a.g + heuristic(a.x,a.y)) - (b.g + heuristic(b.x,b.y)));
+            const n = open.shift();
             if (n.x === gx && n.y === gy) {
                 n.path.push({ x: end.x, y: end.y });
-                return n.path;
+                return simplifyPath(n.path);
             }
             for (const [dx, dy] of dirs) {
                 const nx = n.x + dx;
@@ -441,10 +470,10 @@ window.addEventListener('load', () => {
                 if (Math.hypot(nx - start.x, ny - start.y) > limit)
                     continue;
                 visited.add(key);
-                queue.push({ x: nx, y: ny, path: n.path.concat([{ x: nx, y: ny }]) });
+                open.push({ x: nx, y: ny, g: n.g + step, path: n.path.concat([{ x: nx, y: ny }]) });
             }
         }
-        return [{ x: start.x, y: start.y }, { x: end.x, y: end.y }];
+        return [start, end];
     }
 
     function drawPipePath(path, color, offset) {

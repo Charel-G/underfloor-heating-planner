@@ -3,6 +3,12 @@
 This project contains a small HTML5 application for planning underfloor heating layouts. It supports multiple floors, walls with angle and point snapping, draggable lines with editable lengths, rectangular distributors and polygonal zones assigned to distributors. The application can automatically route supply and return pipes from distributors to zones using horizontal and vertical segments that avoid walls when possible.
 The routing algorithm now estimates a search radius from the distributor to the furthest wall so that pipe paths stay within the building outline.
 
+Pipe routing now checks if a direct path from a distributor to a zone edge is
+free of walls. When possible that straight route is used. Otherwise an A*
+search with a Manhattan heuristic finds the shortest axis-aligned route. After
+reaching the zone border the pipes fill the zone in a serpentine pattern and
+return to the distributor.
+
 ## Usage
 
 Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors; click a floor in the list to view it or double‑click its name to rename it.
