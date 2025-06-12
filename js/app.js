@@ -812,30 +812,42 @@ window.addEventListener('load', () => {
         });
         ctx.fillStyle = '#ccc';
         ctx.strokeStyle = '#000';
+        ctx.lineJoin = 'miter';
+        ctx.lineCap = 'butt';
         for (const key in joints) {
             const j = joints[key];
-            if (j.segs.length > 1) {
-                const pts = [];
-                j.segs.forEach(s => {
-                    const dx = s.ox - s.x;
-                    const dy = s.oy - s.y;
-                    const len = Math.hypot(dx, dy) || 1;
-                    const ux = dx / len;
-                    const uy = dy / len;
-                    const half = s.thick / 2;
-                    pts.push({ x: j.x - uy * half, y: j.y + ux * half });
-                    pts.push({ x: j.x + uy * half, y: j.y - ux * half });
-                });
-                pts.sort((a, b) => Math.atan2(a.y - j.y, a.x - j.x) - Math.atan2(b.y - j.y, b.x - j.x));
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y);
-                for (let i = 1; i < pts.length; i++) {
-                    ctx.lineTo(pts[i].x, pts[i].y);
-                }
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
+            if (j.segs.length < 2) continue;
+            let pts = [];
+            j.segs.forEach(s => {
+                const dx = s.ox - s.x;
+                const dy = s.oy - s.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const ux = dx / len;
+                const uy = dy / len;
+                const half = s.thick / 2;
+                const px = ux * half;
+                const py = uy * half;
+                const nx = -uy * half;
+                const ny = ux * half;
+                pts.push({ x: j.x - px + nx, y: j.y - py + ny });
+                pts.push({ x: j.x - px - nx, y: j.y - py - ny });
+                pts.push({ x: j.x + px - nx, y: j.y + py - ny });
+                pts.push({ x: j.x + px + nx, y: j.y + py + ny });
+            });
+            // remove near-duplicate points
+            const uniq = [];
+            pts.forEach(p => {
+                if (!uniq.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 0.1)) uniq.push(p);
+            });
+            uniq.sort((a, b) => Math.atan2(a.y - j.y, a.x - j.x) - Math.atan2(b.y - j.y, b.x - j.x));
+            ctx.beginPath();
+            ctx.moveTo(uniq[0].x, uniq[0].y);
+            for (let i = 1; i < uniq.length; i++) {
+                ctx.lineTo(uniq[i].x, uniq[i].y);
             }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
         }
     }
 
