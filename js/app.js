@@ -14,6 +14,7 @@ window.addEventListener('load', () => {
     const addDoorBtn = document.getElementById('addDoorBtn');
     const editDistributorBtn = document.getElementById('editDistributorBtn');
     const panBtn = document.getElementById('panBtn');
+    const centerBtn = document.getElementById('centerBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
@@ -21,6 +22,15 @@ window.addEventListener('load', () => {
     const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
+
+    Object.assign(toolButtons, {
+        wall: drawWallBtn,
+        zone: drawZoneBtn,
+        distributor: addDistributorBtn,
+        door: addDoorBtn,
+        select: selectBtn,
+        pan: panBtn
+    });
 
     let gridSize = parseFloat(gridInput.value) || 38;
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
@@ -30,6 +40,7 @@ window.addEventListener('load', () => {
     let floors = [];
     let currentFloor = null;
     let mode = null;
+    const toolButtons = {};
     let drawing = false;
     let startX = 0;
     let startY = 0;
@@ -39,6 +50,12 @@ window.addEventListener('load', () => {
     let selectedDoor = null;
     let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
+
+    function setMode(m) {
+        mode = m;
+        Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
+        if (toolButtons[m]) toolButtons[m].classList.add('active');
+    }
 
     function resizeCanvas() {
         canvas.width = canvasPanel.clientWidth;
@@ -96,11 +113,11 @@ window.addEventListener('load', () => {
     });
 
     drawWallBtn.addEventListener('click', () => {
-        mode = 'wall';
+        setMode('wall');
     });
 
     selectBtn.addEventListener('click', () => {
-        mode = 'select';
+        setMode('select');
         selectedWall = null;
         lengthInput.value = '';
         lengthInput.disabled = true;
@@ -108,15 +125,15 @@ window.addEventListener('load', () => {
     });
 
     drawZoneBtn.addEventListener('click', () => {
-        mode = 'zone';
+        setMode('zone');
     });
 
     addDistributorBtn.addEventListener('click', () => {
-        mode = 'distributor';
+        setMode('distributor');
     });
 
     addDoorBtn.addEventListener('click', () => {
-        mode = 'door';
+        setMode('door');
     });
 
     editDistributorBtn.addEventListener('click', () => {
@@ -134,7 +151,13 @@ window.addEventListener('load', () => {
     });
 
     panBtn.addEventListener('click', () => {
-        mode = 'pan';
+        setMode('pan');
+    });
+
+    centerBtn.addEventListener('click', () => {
+        offsetX = 0;
+        offsetY = 0;
+        drawAll();
     });
 
     function deleteSelected() {
@@ -1181,5 +1204,6 @@ window.addEventListener('load', () => {
 
     // initialise with one floor
     addFloor('Floor 1');
+    setMode('select');
     resizeCanvas();
 });
