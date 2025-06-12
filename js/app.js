@@ -172,6 +172,7 @@ window.addEventListener('load', () => {
 
     clearBtn.addEventListener('click', () => {
         if (!currentFloor) return;
+        if (!confirm('Clear all items on this floor?')) return;
         currentFloor.walls = [];
         currentFloor.zones = [];
         currentFloor.distributors = [];
