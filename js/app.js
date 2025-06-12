@@ -1,7 +1,7 @@
 window.addEventListener('load', () => {
     const canvas = document.getElementById('floorPlanCanvas');
     const ctx = canvas.getContext('2d');
-    const header = document.querySelector('h1');
+    const header = document.getElementById('pageHeader');
     const canvasPanel = document.getElementById('canvasPanel');
     const toolbar = document.getElementById('toolbar');
     const addFloorBtn = document.getElementById('addFloorBtn');

@@ -1,5 +1,5 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: "Segoe UI", "Roboto", "Aptos", sans-serif;
     margin: 0;
     padding: 10px;
     box-sizing: border-box;
@@ -10,9 +10,16 @@ body {
     overflow: hidden;
 }
 
-h1 {
+
+#pageHeader {
+    background: #333;
+    color: #fff;
+    padding: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+#pageHeader h1 {
     margin: 0;
-    padding-bottom: 8px;
     font-size: 24px;
 }
 
@@ -30,10 +37,11 @@ h1 {
     margin-right: 10px;
     display: flex;
     flex-direction: column;
-    background: #fafafa;
+    background: #eaeaea;
     border-right: 1px solid #ddd;
     padding: 8px;
     box-sizing: border-box;
+    box-shadow: 2px 0 4px rgba(0,0,0,0.2);
 }
 
 #floorPanel button {
@@ -71,8 +79,8 @@ h1 {
     margin: 0 0 8px 0;
     display: flex;
     flex-wrap: wrap;
-    background: #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    background: #fdfdfd;
+    box-shadow: none;
     padding: 6px;
     border-radius: 4px;
 }

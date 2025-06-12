@@ -35,6 +35,8 @@ Walls are drawn with a default thickness of 0.25 m. When a wall is selected, t
 
 The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. Adjust the grid size input if needed. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas. Click **Draw Pipes** to automatically route supply and return pipes and fill each zone. Use **Fix Wall Joints** if corners don't connect correctly. **Clear** removes all items from the current floor.
 
+The interface uses a darker header with lighter panels below it. The floor list and toolbar have subtle backgrounds so the layout looks more modern and readable.
+
 You can simply open `index.html` in your browser or run a small local server
 with Python:
 
