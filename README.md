@@ -19,8 +19,7 @@ the distributor so no second loop is drawn inside the zone.
 - Walls have adjustable thickness (default 0.25 m) and doorways can be dropped onto walls
 - Nearby wall endpoints automatically join to remove small gaps
 - Adjacent walls blend together so their thickness appears continuous
-- Joints between walls are filled with polygonal patches rather than round caps;
-  use **Fix Wall Joints** to recompute them manually
+- Wall corners connect seamlessly when their thick edges touch; use **Fix Wall Joints** if endpoints drift apart
 - Rectangular distributors with editable size, name and pipe connections
 - Zones drawn as polygons assigned to a distributor and spacing
 - Automatic supply and return routing with serpentine filling

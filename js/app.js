@@ -643,51 +643,56 @@ window.addEventListener('load', () => {
         const dx = w.x2 - w.x1;
         const dy = w.y2 - w.y1;
         const len = Math.hypot(dx, dy) || 1;
-        const ux = dx / len;
-        const uy = dy / len;
-        const half = (w.thickness || defaultWallThickness) / 2;
-        const nx = -uy * half;
-        const ny = ux * half;
         const doors = (w.doors || []).slice().sort((a,b)=> (a.offset - a.width/2) - (b.offset - b.width/2));
+        const thickness = w.thickness || defaultWallThickness;
         let last = 0;
-        ctx.fillStyle = '#ccc';
-        ctx.strokeStyle = isSelected ? 'red' : '#000';
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
         for (let i=0;i<=doors.length;i++) {
             const segEnd = i<doors.length ? doors[i].offset - doors[i].width/2 : len;
             if (segEnd > last) {
-                const sx = w.x1 + ux*last;
-                const sy = w.y1 + uy*last;
-                const ex = w.x1 + ux*segEnd;
-                const ey = w.y1 + uy*segEnd;
+                const sx = w.x1 + dx * (last/len);
+                const sy = w.y1 + dy * (last/len);
+                const ex = w.x1 + dx * (segEnd/len);
+                const ey = w.y1 + dy * (segEnd/len);
+                ctx.strokeStyle = '#ccc';
+                ctx.lineWidth = thickness;
                 ctx.beginPath();
-                ctx.moveTo(sx+nx, sy+ny);
-                ctx.lineTo(ex+nx, ey+ny);
-                ctx.lineTo(ex-nx, ey-ny);
-                ctx.lineTo(sx-nx, sy-ny);
-                ctx.closePath();
-                ctx.fill();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(ex, ey);
+                ctx.stroke();
+
+                ctx.strokeStyle = isSelected ? 'red' : '#000';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(ex, ey);
                 ctx.stroke();
             }
             if (i<doors.length) {
                 const d = doors[i];
                 const ds = d.offset - d.width/2;
                 const de = d.offset + d.width/2;
-                const sx = w.x1 + ux*ds;
-                const sy = w.y1 + uy*ds;
-                const ex = w.x1 + ux*de;
-                const ey = w.y1 + uy*de;
+                const sx = w.x1 + dx * (ds/len);
+                const sy = w.y1 + dy * (ds/len);
+                const ex = w.x1 + dx * (de/len);
+                const ey = w.y1 + dy * (de/len);
+                const half = thickness / 2;
+                const ux = dx / len;
+                const uy = dy / len;
+                const nx = -uy * half;
+                const ny = ux * half;
+                ctx.fillStyle = '#fff';
+                ctx.strokeStyle = (d === selectedDoor) ? 'orange' : '#000';
+                ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(sx+nx, sy+ny);
                 ctx.lineTo(ex+nx, ey+ny);
                 ctx.lineTo(ex-nx, ey-ny);
                 ctx.lineTo(sx-nx, sy-ny);
                 ctx.closePath();
-                ctx.fillStyle = '#fff';
                 ctx.fill();
-                ctx.strokeStyle = (d === selectedDoor) ? 'orange' : '#000';
                 ctx.stroke();
-                ctx.fillStyle = '#ccc';
-                ctx.strokeStyle = isSelected ? 'red' : '#000';
                 last = de;
             }
         }
@@ -761,9 +766,10 @@ window.addEventListener('load', () => {
     // Adjust wall endpoints so nearby walls meet seamlessly
     function connectWalls() {
         if (!currentFloor) return;
-        const thresh = SNAP_DIST;
+        const threshBase = SNAP_DIST;
         for (let i = 0; i < currentFloor.walls.length; i++) {
             const a = currentFloor.walls[i];
+            const ta = a.thickness || defaultWallThickness;
             const endpoints = [
                 { key: 'x1', keyy: 'y1' },
                 { key: 'x2', keyy: 'y2' }
@@ -774,6 +780,8 @@ window.addEventListener('load', () => {
                 for (let j = 0; j < currentFloor.walls.length; j++) {
                     if (i === j) continue;
                     const b = currentFloor.walls[j];
+                    const tb = b.thickness || defaultWallThickness;
+                    const thresh = Math.max(ta, tb) / 2 + threshBase;
                     // snap to other wall endpoints
                     const pts = [ {x:b.x1,y:b.y1}, {x:b.x2,y:b.y2} ];
                     pts.forEach(p => {
@@ -802,50 +810,23 @@ window.addEventListener('load', () => {
         currentFloor.walls.forEach(w => {
             const thick = w.thickness || defaultWallThickness;
             [
-                { x: w.x1, y: w.y1, ox: w.x2, oy: w.y2, thick },
-                { x: w.x2, y: w.y2, ox: w.x1, oy: w.y1, thick }
+                { x: w.x1, y: w.y1, thick },
+                { x: w.x2, y: w.y2, thick }
             ].forEach(pt => {
                 const key = pt.x + ',' + pt.y;
-                if (!joints[key]) joints[key] = { x: pt.x, y: pt.y, segs: [] };
-                joints[key].segs.push(pt);
+                if (!joints[key]) joints[key] = { x: pt.x, y: pt.y, max: 0, count: 0 };
+                joints[key].max = Math.max(joints[key].max, pt.thick);
+                joints[key].count += 1;
             });
         });
         ctx.fillStyle = '#ccc';
         ctx.strokeStyle = '#000';
-        ctx.lineJoin = 'miter';
-        ctx.lineCap = 'butt';
         for (const key in joints) {
             const j = joints[key];
-            if (j.segs.length < 2) continue;
-            let pts = [];
-            j.segs.forEach(s => {
-                const dx = s.ox - s.x;
-                const dy = s.oy - s.y;
-                const len = Math.hypot(dx, dy) || 1;
-                const ux = dx / len;
-                const uy = dy / len;
-                const half = s.thick / 2;
-                const px = ux * half;
-                const py = uy * half;
-                const nx = -uy * half;
-                const ny = ux * half;
-                pts.push({ x: j.x - px + nx, y: j.y - py + ny });
-                pts.push({ x: j.x - px - nx, y: j.y - py - ny });
-                pts.push({ x: j.x + px - nx, y: j.y + py - ny });
-                pts.push({ x: j.x + px + nx, y: j.y + py + ny });
-            });
-            // remove near-duplicate points
-            const uniq = [];
-            pts.forEach(p => {
-                if (!uniq.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 0.1)) uniq.push(p);
-            });
-            uniq.sort((a, b) => Math.atan2(a.y - j.y, a.x - j.x) - Math.atan2(b.y - j.y, b.x - j.x));
+            if (j.count < 2) continue;
+            const size = j.max;
             ctx.beginPath();
-            ctx.moveTo(uniq[0].x, uniq[0].y);
-            for (let i = 1; i < uniq.length; i++) {
-                ctx.lineTo(uniq[i].x, uniq[i].y);
-            }
-            ctx.closePath();
+            ctx.rect(j.x - size/2, j.y - size/2, size, size);
             ctx.fill();
             ctx.stroke();
         }
