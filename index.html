@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underfloor Heating Planner</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <h1>Underfloor Heating Planner</h1>
+    <div id="main">
+        <div id="floorPanel">
+            <button id="addFloorBtn">Add Floor</button>
+            <ul id="floorList"></ul>
+        </div>
+        <div id="canvasPanel">
+            <div id="toolbar">
+                <button id="drawWallBtn">Draw Wall</button>
+                <button id="selectBtn">Select/Move</button>
+                <button id="panBtn">Pan</button>
+                <button id="drawZoneBtn">Draw Zone</button>
+                <button id="addDistributorBtn">Add Distributor</button>
+                <button id="editDistributorBtn">Edit Distributor</button>
+                <label>
+                    Grid Size:
+                    <input id="gridSize" type="number" value="38" min="10" step="1">
+                </label>
+                <label>
+                    Pipe Spacing (mm):
+                    <input id="pipeSpacing" type="number" value="300" min="10" step="10">
+                </label>
+                <label>
+                    Line Length:
+                    <input id="lineLength" type="number" step="1" disabled>
+                </label>
+                <button id="drawPipesBtn">Draw Pipes</button>
+                <button id="deleteBtn">Delete Selected</button>
+                <button id="clearBtn">Clear</button>
+            </div>
+            <canvas id="floorPlanCanvas" width="800" height="600"></canvas>
+        </div>
+    </div>
+    <script src="js/app.js"></script>
+</body>
+</html>
