@@ -3,11 +3,11 @@
 This repository contains a small HTML5 application for planning underfloor
 heating layouts. It supports multiple floors, snapping walls and zones,
 distributor rectangles and automatic pipe routing.
-Pipes are drawn from the chosen distributor to each zone using horizontal and
-vertical segments that avoid walls when possible. If a direct line is blocked,
-an A* search with a Manhattan heuristic finds the shortest axis‑aligned route.
-After reaching the zone the pipes fill it in a serpentine pattern and then
-return to the distributor along the same path.
+Pipes are drawn from each distributor to its zones using an A* search that
+explores eight directions. Diagonal steps are straightened into horizontal and
+vertical segments so the pipes never run at odd angles or through walls.
+After reaching the zone, a serpentine loop is drawn inside it and the return
+line follows the supply path back to the distributor.
 
 ## Features
 
