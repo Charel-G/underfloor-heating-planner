@@ -27,7 +27,7 @@ the distributor so no second loop is drawn inside the zone.
 
 ## Usage
 
-Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors; click a floor in the list to view it or double‑click its name to rename it.
+Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors; click a floor in the list to view it or double‑click its name to rename it. Related drawing actions are grouped in the toolbar for quicker access.
 The **Draw Wall** tool creates snapping lines. Use **Draw Zone** to trace around an area using multiple segments; when you finish back at the starting point the zone is created and you can enter its parameters. Use **Select/Move** to drag whole lines or their ends and edit their length in the **Line Length** input. Zones and distributors can also be moved with this tool. Double‑click a zone or distributor to change its properties or use the **Edit Distributor** button when a distributor is selected. Use **Delete Selected** (or press the Delete key) to remove the currently selected wall, zone or distributor.
 
 Walls are drawn with a default thickness of 0.25 m. When a wall is selected, the **Wall Thickness** input allows you to change this value. The **Add Door** tool places a doorway onto a wall; doors snap to the wall’s centre line and can be repositioned with the select tool or resized by double‑clicking them.
