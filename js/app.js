@@ -17,11 +17,14 @@ window.addEventListener('load', () => {
     const centerBtn = document.getElementById('centerBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
+    const exportBtn = document.getElementById('exportBtn');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
     const spacingInput = document.getElementById('pipeSpacing');
     const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
+
+    const toolButtons = {};
 
     Object.assign(toolButtons, {
         wall: drawWallBtn,
@@ -40,13 +43,13 @@ window.addEventListener('load', () => {
     let floors = [];
     let currentFloor = null;
     let mode = null;
-    const toolButtons = {};
     let drawing = false;
     let startX = 0;
     let startY = 0;
     let selectedWall = null;
     let selectedZone = null;
     let selectedDistributor = null;
+    let selectedPipe = null;
     let selectedDoor = null;
     let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
@@ -73,7 +76,8 @@ window.addEventListener('load', () => {
             name,
             walls: [],
             zones: [],
-            distributors: []
+            distributors: [],
+            pipes: []
         });
         currentFloor = floors[floors.length - 1];
         updateFloorList();
@@ -90,6 +94,7 @@ window.addEventListener('load', () => {
                 selectedWall = null;
                 selectedZone = null;
                 selectedDistributor = null;
+                selectedPipe = null;
                 updateFloorList();
                 drawAll();
             });
@@ -181,6 +186,10 @@ window.addEventListener('load', () => {
             const i = currentFloor.distributors.indexOf(selectedDistributor);
             if (i >= 0) currentFloor.distributors.splice(i, 1);
             selectedDistributor = null;
+        } else if (selectedPipe) {
+            const i = currentFloor.pipes.indexOf(selectedPipe);
+            if (i >= 0) currentFloor.pipes.splice(i, 1);
+            selectedPipe = null;
         }
         drawAll();
     }
@@ -199,9 +208,11 @@ window.addEventListener('load', () => {
         currentFloor.walls = [];
         currentFloor.zones = [];
         currentFloor.distributors = [];
+        currentFloor.pipes = [];
         selectedWall = null;
         selectedZone = null;
         selectedDistributor = null;
+        selectedPipe = null;
         drawAll();
     });
 
@@ -301,6 +312,12 @@ window.addEventListener('load', () => {
                 ctx.fillText(d.name, d.x - d.width / 2 + 2, d.y - d.height / 2 + 12);
             }
         });
+
+        // pipes
+        currentFloor.pipes.forEach(p => {
+            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', 0);
+            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', 4);
+        });
         ctx.restore();
     }
 
@@ -310,11 +327,9 @@ window.addEventListener('load', () => {
         return { x: cx, y: cy };
     }
 
-    function drawPipes() {
-        drawAll();
+    function generatePipes() {
         if (!currentFloor) return;
-        ctx.save();
-        ctx.translate(offsetX, offsetY);
+        currentFloor.pipes = [];
         currentFloor.zones.forEach(zone => {
             const rect = zoneBounds(zone);
             const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
@@ -330,10 +345,33 @@ window.addEventListener('load', () => {
             const supplyPath = toEntry.concat(zonePath);
             const returnPath = toEntry.slice().reverse();
 
-            drawPipePath(supplyPath, 'red', 0);
-            drawPipePath(returnPath, 'blue', 4);
+            const length = pathLength(supplyPath) + pathLength(returnPath);
+            currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length });
         });
-        ctx.restore();
+        drawAll();
+    }
+
+    function exportPlan() {
+        if (!currentFloor) return;
+        drawAll();
+        const png = canvas.toDataURL('image/png');
+        const data = currentFloor.pipes.map(p => ({
+            zone: p.zone.name || '',
+            distributor: p.distributor.name || '',
+            length_m: p.length.toFixed(2)
+        }));
+        const json = JSON.stringify({ pipes: data }, null, 2);
+        const imgLink = document.createElement('a');
+        imgLink.href = png;
+        imgLink.download = 'floorplan.png';
+        imgLink.click();
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const dataLink = document.createElement('a');
+        dataLink.href = url;
+        dataLink.download = 'floorplan-data.json';
+        dataLink.click();
+        URL.revokeObjectURL(url);
     }
 
     const SNAP_DIST = 10;
@@ -678,6 +716,16 @@ window.addEventListener('load', () => {
         }
     }
 
+    function pathLength(path) {
+        let len = 0;
+        for (let i = 0; i < path.length - 1; i++) {
+            const p1 = path[i];
+            const p2 = path[i + 1];
+            len += Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        }
+        return len / pixelsPerMeter;
+    }
+
     function drawWall(w, isSelected) {
         const dx = w.x2 - w.x1;
         const dy = w.y2 - w.y1;
@@ -916,6 +964,21 @@ window.addEventListener('load', () => {
         return null;
     }
 
+    function hitTestPipe(x, y) {
+        for (let i = currentFloor.pipes.length - 1; i >= 0; i--) {
+            const p = currentFloor.pipes[i];
+            const paths = [p.supplyPath, p.returnPath];
+            for (const path of paths) {
+                for (let j = 0; j < path.length - 1; j++) {
+                    if (distanceToSegment(x, y, path[j].x, path[j].y, path[j+1].x, path[j+1].y) < SNAP_DIST) {
+                        return p;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     canvas.addEventListener('mousedown', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
@@ -967,6 +1030,7 @@ window.addEventListener('load', () => {
                 selectedZone = null;
                 selectedDistributor = null;
                 selectedDoor = null;
+                selectedPipe = null;
                 dragMode = hit.mode;
                 drawing = true;
                 lengthInput.disabled = false;
@@ -982,6 +1046,7 @@ window.addEventListener('load', () => {
                 const r = hitTestZone(startX, startY);
                 const d = hitTestDistributor(startX, startY);
                 const doorHit = hitTestDoor(startX, startY);
+                const p = hitTestPipe(startX, startY);
                 if (doorHit) {
                     selectedWall = doorHit.wall;
                     selectedDoor = doorHit.door;
@@ -989,6 +1054,11 @@ window.addEventListener('load', () => {
                     drawing = true;
                     wallThicknessInput.disabled = false;
                     wallThicknessInput.value = (selectedWall.thickness||defaultWallThickness)/pixelsPerMeter;
+                } else if (p) {
+                    selectedPipe = p;
+                    selectedZone = null;
+                    selectedDistributor = null;
+                    drawAll();
                 } else if (r) {
                     selectedZone = r;
                     selectedDistributor = null;
@@ -1003,6 +1073,7 @@ window.addEventListener('load', () => {
                     selectedZone = null;
                     selectedDistributor = null;
                     selectedDoor = null;
+                    selectedPipe = null;
                     drawAll();
                 }
             }
@@ -1161,7 +1232,8 @@ window.addEventListener('load', () => {
         drawAll();
     });
 
-    drawPipesBtn.addEventListener('click', drawPipes);
+    drawPipesBtn.addEventListener('click', generatePipes);
+    exportBtn.addEventListener('click', exportPlan);
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
     canvas.addEventListener('dblclick', e => {
