@@ -221,6 +221,7 @@ window.addEventListener('load', () => {
         currentFloor.walls.forEach(w => {
             drawWall(w, w === selectedWall);
         });
+        drawWallJoints();
         ctx.strokeStyle = '#000';
         // zones
         currentFloor.zones.forEach(z => {
@@ -792,6 +793,30 @@ window.addEventListener('load', () => {
                 a[ep.key] = ex;
                 a[ep.keyy] = ey;
             });
+        }
+    }
+
+    function drawWallJoints() {
+        const joints = {};
+        currentFloor.walls.forEach(w => {
+            const thick = w.thickness || defaultWallThickness;
+            [[w.x1, w.y1], [w.x2, w.y2]].forEach(pt => {
+                const key = pt[0] + ',' + pt[1];
+                if (!joints[key]) joints[key] = { x: pt[0], y: pt[1], count: 0, thick: 0 };
+                joints[key].count++;
+                joints[key].thick = Math.max(joints[key].thick, thick);
+            });
+        });
+        ctx.fillStyle = '#ccc';
+        ctx.strokeStyle = '#000';
+        for (const key in joints) {
+            const j = joints[key];
+            if (j.count > 1) {
+                ctx.beginPath();
+                ctx.arc(j.x, j.y, j.thick / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
         }
     }
 
