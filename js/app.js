@@ -22,7 +22,6 @@ window.addEventListener('load', () => {
     const exportBtn = document.getElementById('exportBtn');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
     const spacingInput = document.getElementById('pipeSpacing');
-    const gridInput = document.getElementById('gridSize');
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
 
@@ -37,7 +36,7 @@ window.addEventListener('load', () => {
         pan: panBtn
     });
 
-    let gridSize = parseFloat(gridInput.value) || 38;
+    const gridSize = 38; // grid spacing in pixels (0.5 m)
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let offsetX = 0;
@@ -253,12 +252,6 @@ window.addEventListener('load', () => {
         drawAll();
     });
 
-    gridInput.addEventListener('change', () => {
-        gridSize = parseFloat(gridInput.value) || 38;
-        pixelsPerMeter = gridSize * 2;
-        defaultWallThickness = 0.25 * pixelsPerMeter;
-        drawAll();
-    });
 
     lengthInput.addEventListener('change', () => {
         if (!selectedWall) return;
@@ -284,24 +277,30 @@ window.addEventListener('load', () => {
     });
 
     function drawGrid() {
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
         ctx.strokeStyle = '#ccc';
         ctx.beginPath();
 
-        let startX = (-offsetX) % gridSize;
-        if (startX > 0) startX -= gridSize;
-        for (let x = startX; x <= canvas.width; x += gridSize) {
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, canvas.height);
+        const left = -offsetX;
+        const right = canvas.width - offsetX;
+        const top = -offsetY;
+        const bottom = canvas.height - offsetY;
+
+        const startX = Math.floor(left / gridSize) * gridSize;
+        for (let x = startX; x <= right; x += gridSize) {
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, bottom);
         }
 
-        let startY = (-offsetY) % gridSize;
-        if (startY > 0) startY -= gridSize;
-        for (let y = startY; y <= canvas.height; y += gridSize) {
-            ctx.moveTo(0, y);
-            ctx.lineTo(canvas.width, y);
+        const startY = Math.floor(top / gridSize) * gridSize;
+        for (let y = startY; y <= bottom; y += gridSize) {
+            ctx.moveTo(left, y);
+            ctx.lineTo(right, y);
         }
 
         ctx.stroke();
+        ctx.restore();
     }
 
     function drawAll() {
