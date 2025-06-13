@@ -9,6 +9,8 @@ window.addEventListener('load', () => {
     const deleteFloorBtn = document.getElementById('deleteFloorBtn');
     const floorList = document.getElementById('floorList');
     const deleteBtn = document.getElementById('deleteBtn');
+    const distributorList = document.getElementById('distributorList');
+    const deleteDistributorBtn = document.getElementById('deleteDistributorBtn');
     const drawWallBtn = document.getElementById('drawWallBtn');
     const selectBtn = document.getElementById('selectBtn');
     const drawZoneBtn = document.getElementById('drawZoneBtn');
@@ -84,6 +86,7 @@ window.addEventListener('load', () => {
         });
         currentFloor = floors[floors.length - 1];
         updateFloorList();
+        updateDistributorList();
     }
 
     function updateFloorList() {
@@ -99,6 +102,7 @@ window.addEventListener('load', () => {
                 selectedDistributor = null;
                 selectedPipe = null;
                 updateFloorList();
+                updateDistributorList();
                 drawAll();
             });
             li.addEventListener('dblclick', () => {
@@ -109,6 +113,31 @@ window.addEventListener('load', () => {
                 }
             });
             floorList.appendChild(li);
+        });
+    }
+
+    function updateDistributorList() {
+        distributorList.innerHTML = '';
+        if (!currentFloor) return;
+        currentFloor.distributors.forEach((d, idx) => {
+            const li = document.createElement('li');
+            li.textContent = d.name || `D${idx + 1}`;
+            if (d === selectedDistributor) li.classList.add('selected');
+            li.addEventListener('click', () => {
+                selectedDistributor = d;
+                selectedWall = null;
+                selectedZone = null;
+                selectedPipe = null;
+                selectedDoor = null;
+                updateDistributorList();
+                drawAll();
+            });
+            li.addEventListener('dblclick', () => {
+                d.name = prompt('Name?', d.name || '') || d.name;
+                updateDistributorList();
+                drawAll();
+            });
+            distributorList.appendChild(li);
         });
     }
 
@@ -141,6 +170,7 @@ window.addEventListener('load', () => {
                 currentFloor = null;
             }
             updateFloorList();
+            updateDistributorList();
             drawAll();
         }
     });
@@ -197,7 +227,23 @@ window.addEventListener('load', () => {
         if (!currentFloor) return;
         if (selectedWall) {
             const i = currentFloor.walls.indexOf(selectedWall);
-            if (i >= 0) currentFloor.walls.splice(i, 1);
+            if (i >= 0) {
+                // detach or remove distributors referencing this wall
+                currentFloor.distributors.forEach(d => {
+                    if (d.wallId != null) {
+                        if (d.wallId === i) {
+                            const pos = distributorPosition(d);
+                            d.x = pos.x;
+                            d.y = pos.y;
+                            d.wallId = null;
+                        } else if (d.wallId > i) {
+                            d.wallId--;
+                        }
+                    }
+                });
+                currentFloor.walls.splice(i, 1);
+                updateDistributorList();
+            }
             selectedWall = null;
             lengthInput.value = '';
             wallThicknessInput.value = '';
@@ -212,8 +258,15 @@ window.addEventListener('load', () => {
             selectedZone = null;
         } else if (selectedDistributor) {
             const i = currentFloor.distributors.indexOf(selectedDistributor);
-            if (i >= 0) currentFloor.distributors.splice(i, 1);
+            if (i >= 0) {
+                currentFloor.distributors.splice(i, 1);
+                currentFloor.zones.forEach(z => {
+                    if (z.distributorId === i) z.distributorId = null;
+                    else if (z.distributorId > i) z.distributorId--;
+                });
+            }
             selectedDistributor = null;
+            updateDistributorList();
         } else if (selectedPipe) {
             const i = currentFloor.pipes.indexOf(selectedPipe);
             if (i >= 0) currentFloor.pipes.splice(i, 1);
@@ -223,6 +276,10 @@ window.addEventListener('load', () => {
     }
 
     deleteBtn.addEventListener('click', deleteSelected);
+    deleteDistributorBtn.addEventListener('click', () => {
+        if (!selectedDistributor) return;
+        deleteSelected();
+    });
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Delete') {
@@ -249,6 +306,7 @@ window.addEventListener('load', () => {
         selectedZone = null;
         selectedDistributor = null;
         selectedPipe = null;
+        updateDistributorList();
         drawAll();
     });
 
@@ -655,7 +713,8 @@ window.addEventListener('load', () => {
             const nx = -uy;
             const ny = ux;
             const thick = w.thickness || defaultWallThickness;
-            const centerOff = d.sign * (thick / 2 - d.height / 2);
+            const extra = 0.02 * pixelsPerMeter;
+            const centerOff = d.sign * (thick / 2 - d.height / 2 + extra);
             return {
                 x: w.x1 + ux * d.offset + nx * centerOff,
                 y: w.y1 + uy * d.offset + ny * centerOff
@@ -794,12 +853,12 @@ window.addEventListener('load', () => {
         const bounds = floorBounds();
         if (lineClear(start, end)) return [start, end];
         const limit = farthestWallDistance(start) + step * 4;
-        const sx = Math.round(start.x / step) * step;
-        const sy = Math.round(start.y / step) * step;
-        const gx = Math.round(end.x / step) * step;
-        const gy = Math.round(end.y / step) * step;
-        const open = [{ x: sx, y: sy, g: 0, path: [{ x: start.x, y: start.y }] }];
-        const visited = new Set([`${sx},${sy}`]);
+        const open = [{ x: start.x, y: start.y, g: 0, path: [start] }];
+        const visited = new Set([
+            `${Math.round(start.x/step)},${Math.round(start.y/step)}`
+        ]);
+        const gx = end.x;
+        const gy = end.y;
         const dirs = [
             [ step, 0, step ], [-step, 0, step],
             [ 0, step, step ], [0,-step, step],
@@ -814,14 +873,14 @@ window.addEventListener('load', () => {
         while (open.length) {
             open.sort((a,b)=> (a.g + heuristic(a.x,a.y)) - (b.g + heuristic(b.x,b.y)));
             const n = open.shift();
-            if (n.x === gx && n.y === gy) {
+            if (Math.abs(n.x - gx) < step/2 && Math.abs(n.y - gy) < step/2) {
                 n.path.push({ x: end.x, y: end.y });
                 return simplifyPath(n.path);
             }
             for (const [dx, dy, cost] of dirs) {
                 const nx = n.x + dx;
                 const ny = n.y + dy;
-                const key = `${nx},${ny}`;
+                const key = `${Math.round(nx/step)},${Math.round(ny/step)}`;
                 if (visited.has(key)) continue;
                 if (segmentIntersectsWall(n.x, n.y, nx, ny)) continue;
                 if (nx < bounds.minX - step || nx > bounds.maxX + step || ny < bounds.minY - step || ny > bounds.maxY + step)
@@ -1231,6 +1290,7 @@ window.addEventListener('load', () => {
             } else {
                 currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
             }
+            updateDistributorList();
             drawAll();
         } else if (mode === 'door') {
             const hit = hitTestWall(startX, startY);
@@ -1244,8 +1304,19 @@ window.addEventListener('load', () => {
                 drawAll();
             }
         } else if (mode === 'select') {
+            const d = hitTestDistributor(startX, startY);
             const hit = hitTestWall(startX, startY);
-            if (hit.wall) {
+            if (d) {
+                selectedDistributor = d;
+                selectedZone = null;
+                selectedWall = null;
+                selectedDoor = null;
+                selectedPipe = null;
+                dragMode = 'moveDistributor';
+                drawing = true;
+                updateDistributorList();
+                drawAll();
+            } else if (hit.wall) {
                 selectedWall = hit.wall;
                 selectedZone = null;
                 selectedDistributor = null;
@@ -1264,7 +1335,7 @@ window.addEventListener('load', () => {
                 wallThicknessInput.value = '';
                 wallThicknessInput.disabled = true;
                 const r = hitTestZone(startX, startY);
-                const d = hitTestDistributor(startX, startY);
+                const d2 = hitTestDistributor(startX, startY);
                 const doorHit = hitTestDoor(startX, startY);
                 const p = hitTestPipe(startX, startY);
                 if (doorHit) {
@@ -1284,11 +1355,12 @@ window.addEventListener('load', () => {
                     selectedDistributor = null;
                     dragMode = 'moveZone';
                     drawing = true;
-                } else if (d) {
-                    selectedDistributor = d;
+                } else if (d2) {
+                    selectedDistributor = d2;
                     selectedZone = null;
                     dragMode = 'moveDistributor';
                     drawing = true;
+                    updateDistributorList();
                 } else {
                     selectedZone = null;
                     selectedDistributor = null;
