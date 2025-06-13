@@ -4,7 +4,9 @@ window.addEventListener('load', () => {
     const header = document.getElementById('pageHeader');
     const canvasPanel = document.getElementById('canvasPanel');
     const toolbar = document.getElementById('toolbar');
-    const addFloorBtn = document.getElementById('addFloorBtn');
+   const addFloorBtn = document.getElementById('addFloorBtn');
+    const renameFloorBtn = document.getElementById('renameFloorBtn');
+    const deleteFloorBtn = document.getElementById('deleteFloorBtn');
     const floorList = document.getElementById('floorList');
     const deleteBtn = document.getElementById('deleteBtn');
     const drawWallBtn = document.getElementById('drawWallBtn');
@@ -115,6 +117,31 @@ window.addEventListener('load', () => {
         const name = prompt('Floor name?', `Floor ${floors.length + 1}`);
         if (name) {
             addFloor(name);
+            drawAll();
+        }
+    });
+
+    renameFloorBtn.addEventListener('click', () => {
+        if (!currentFloor) return;
+        const name = prompt('Floor name?', currentFloor.name);
+        if (name) {
+            currentFloor.name = name;
+            updateFloorList();
+        }
+    });
+
+    deleteFloorBtn.addEventListener('click', () => {
+        if (!currentFloor) return;
+        if (!confirm('Delete this floor?')) return;
+        const idx = floors.indexOf(currentFloor);
+        if (idx >= 0) {
+            floors.splice(idx, 1);
+            if (floors.length) {
+                currentFloor = floors[Math.min(idx, floors.length - 1)];
+            } else {
+                currentFloor = null;
+            }
+            updateFloorList();
             drawAll();
         }
     });
