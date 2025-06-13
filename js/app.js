@@ -60,6 +60,7 @@ window.addEventListener('load', () => {
     let selectedDoor = null;
     let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
+    let typedLength = '';
 
     function setMode(m) {
         mode = m;
@@ -284,17 +285,83 @@ window.addEventListener('load', () => {
     });
 
     document.addEventListener('keydown', e => {
+        const activeTag = document.activeElement.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+        // numeric length entry while drawing walls
+        if (mode === 'wall' && wallStart) {
+            if (/^[0-9]$/.test(e.key) || (e.key === '.' && !typedLength.includes('.'))) {
+                typedLength += e.key;
+                drawAll();
+                e.preventDefault();
+                return;
+            }
+            if (e.key === 'Backspace') {
+                typedLength = typedLength.slice(0, -1);
+                drawAll();
+                e.preventDefault();
+                return;
+            }
+            if (e.key === 'Enter' && typedLength) {
+                const len = parseFloat(typedLength);
+                if (!isNaN(len)) {
+                    const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
+                    let ang = snapAngle(snap.x - wallStart.x, snap.y - wallStart.y);
+                    const norm = Math.hypot(ang.dx, ang.dy) || 1;
+                    const px = len * pixelsPerMeter;
+                    const end = snapToPoints(
+                        wallStart.x + ang.dx / norm * px,
+                        wallStart.y + ang.dy / norm * px
+                    );
+                    currentFloor.walls.push({
+                        x1: wallStart.x,
+                        y1: wallStart.y,
+                        x2: end.x,
+                        y2: end.y,
+                        thickness: defaultWallThickness,
+                        doors: []
+                    });
+                    wallStart = end;
+                    typedLength = '';
+                    connectWalls();
+                    drawAll();
+                }
+                e.preventDefault();
+                return;
+            }
+        }
+
         if (e.key === 'Delete') {
             deleteSelected();
-        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            return;
+        }
+        if (e.key === 'Escape') {
             if (mode === 'wall') {
                 wallStart = null;
+                typedLength = '';
                 drawAll();
             } else if (mode === 'zone') {
                 zoneDrawing = null;
                 drawAll();
             }
+            e.preventDefault();
+            return;
         }
+
+        const key = e.key.toLowerCase();
+        switch (key) {
+            case 'w': setMode('wall'); break;
+            case 'd': setMode('door'); break;
+            case 'x': setMode('distributor'); break;
+            case 'z': setMode('zone'); break;
+            case 's': setMode('select'); break;
+            case 'c': offsetX = 0; offsetY = 0; drawAll(); break;
+            case 'p': setMode('pan'); break;
+            case 'r': generatePipes(); break;
+            default: return; // ignore others
+        }
+        e.preventDefault();
     });
 
     clearBtn.addEventListener('click', () => {
@@ -415,7 +482,15 @@ window.addEventListener('load', () => {
         let lengthInfo = null;
         if (wallStart && mode === 'wall') {
             const ang = snapAngle(previewSnap.x - wallStart.x, previewSnap.y - wallStart.y);
-            const end = snapToPoints(wallStart.x + ang.dx, wallStart.y + ang.dy);
+            let endX = wallStart.x + ang.dx;
+            let endY = wallStart.y + ang.dy;
+            if (typedLength) {
+                const norm = Math.hypot(ang.dx, ang.dy) || 1;
+                const px = parseFloat(typedLength) * pixelsPerMeter;
+                endX = wallStart.x + ang.dx / norm * px;
+                endY = wallStart.y + ang.dy / norm * px;
+            }
+            const end = snapToPoints(endX, endY);
             ctx.strokeStyle = 'red';
             ctx.beginPath();
             ctx.moveTo(wallStart.x, wallStart.y);
@@ -470,7 +545,8 @@ window.addEventListener('load', () => {
             const rect = canvas.getBoundingClientRect();
             const sx = rect.left + window.scrollX + lengthInfo.end.x + offsetX;
             const sy = rect.top + window.scrollY + lengthInfo.end.y + offsetY;
-            lengthBox.textContent = len.toFixed(2) + ' m';
+            const txt = typedLength ? typedLength + ' m' : len.toFixed(2) + ' m';
+            lengthBox.textContent = txt;
             lengthBox.style.left = sx + 'px';
             lengthBox.style.top = (sy - 10) + 'px';
             lengthBox.style.display = 'block';
@@ -1506,6 +1582,7 @@ window.addEventListener('load', () => {
                     doors: []
                 });
                 wallStart = end;
+                typedLength = '';
                 connectWalls();
             }
             drawAll();
