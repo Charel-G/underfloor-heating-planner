@@ -26,6 +26,7 @@ window.addEventListener('load', () => {
     const spacingInput = document.getElementById('pipeSpacing');
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
+    const lengthBox = document.getElementById('lengthBox');
 
     const toolButtons = {};
 
@@ -364,6 +365,7 @@ window.addEventListener('load', () => {
 
     function drawAll() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        lengthBox.style.display = 'none';
         drawGrid();
         ctx.save();
         ctx.translate(offsetX, offsetY);
@@ -410,6 +412,7 @@ window.addEventListener('load', () => {
             previewSnap = snapToPoints(mouseWorld.x, mouseWorld.y);
         }
 
+        let lengthInfo = null;
         if (wallStart && mode === 'wall') {
             const ang = snapAngle(previewSnap.x - wallStart.x, previewSnap.y - wallStart.y);
             const end = snapToPoints(wallStart.x + ang.dx, wallStart.y + ang.dy);
@@ -418,6 +421,7 @@ window.addEventListener('load', () => {
             ctx.moveTo(wallStart.x, wallStart.y);
             ctx.lineTo(end.x, end.y);
             ctx.stroke();
+            lengthInfo = { start: wallStart, end };
         }
 
         if (mode === 'wall' && previewSnap && previewSnap.snapped) {
@@ -425,6 +429,12 @@ window.addEventListener('load', () => {
             ctx.beginPath();
             ctx.arc(previewSnap.x, previewSnap.y, 5, 0, Math.PI * 2);
             ctx.stroke();
+        }
+
+        if (zoneDrawing && mode === 'zone') {
+            const start = zoneDrawing[zoneDrawing.length - 1];
+            const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
+            lengthInfo = { start, end: snap };
         }
         // distributors
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
@@ -453,6 +463,16 @@ window.addEventListener('load', () => {
             drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', base + PARALLEL_OFFSET, retCross);
         });
         ctx.restore();
+
+        if (lengthInfo) {
+            const len = Math.hypot(lengthInfo.end.x - lengthInfo.start.x, lengthInfo.end.y - lengthInfo.start.y) / pixelsPerMeter;
+            const sx = lengthInfo.end.x + offsetX;
+            const sy = lengthInfo.end.y + offsetY;
+            lengthBox.textContent = len.toFixed(2) + ' m';
+            lengthBox.style.left = sx + 'px';
+            lengthBox.style.top = (sy - 20) + 'px';
+            lengthBox.style.display = 'block';
+        }
     }
 
     function closestPointOnRect(rect, x, y) {

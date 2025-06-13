@@ -33,6 +33,7 @@ back to the distributor and are drawn with separate offsets for clarity.
 - Multiple floors with add, rename and delete options
 - Walls snap to grid, intersections and existing points, and can be dragged or resized
 - A circle preview shows when a new wall snaps to an existing point or segment
+- A small length box near the cursor displays the current segment length while drawing
 - Walls have adjustable thickness (default 0.25 m) and doorways can be dropped onto walls
 - Walls and zones can be drawn segment by segment: each click starts the next line from the previous end. Press **Esc** to finish drawing
 - Nearby wall endpoints automatically join to remove small gaps
@@ -62,6 +63,7 @@ back to the distributor and are drawn with separate offsets for clarity.
 Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors. The **Rename Floor** and **Delete Floor** buttons act on the currently selected floor (you can also rename by double‑clicking a floor name). Click a floor in the list to view it. Related drawing actions are grouped in the toolbar for quicker access and the active tool button is highlighted.
 Below the floor list a distributor list shows all manifolds on the current floor. Selecting one highlights it in the plan and the **Delete Distributor** button removes it.
 The **Draw Wall** tool creates snapping lines. After placing a segment the next one begins from the previous endpoint, so you can chain walls together with successive clicks. Press **Esc** to finish and start elsewhere. Use **Draw Zone** in the same way; once you click near the starting point the polygon closes and you can enter its parameters. Use **Select/Move** to drag whole lines or their ends and edit their length in the **Line Length** input. Zones and distributors can also be moved with this tool. Double‑click a zone or distributor to change its properties or use the **Edit Distributor** button when a distributor is selected. Use **Delete Selected** (or press the Delete key) to remove the currently selected wall, zone or distributor.
+While drawing, a small tooltip near the cursor shows the current segment length in metres.
 
 Walls are drawn with a default thickness of 0.25 m. When a wall is selected, the **Wall Thickness** input allows you to change this value. The **Add Door** tool places a doorway onto a wall; doors snap to the wall’s centre line and can be repositioned with the select tool or resized by double‑clicking them. The **Add Distributor** tool behaves similarly but positions the manifold flush with the side of the wall closest to the click so pipes exit directly from that surface.
 
