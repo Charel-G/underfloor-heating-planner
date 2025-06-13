@@ -446,9 +446,9 @@ window.addEventListener('load', () => {
 
         // pipes
         currentFloor.pipes.forEach(p => {
-            const off = PARALLEL_OFFSET * (p.parallelIndex || 0);
-            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', off);
-            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', off + 4);
+            const base = PARALLEL_OFFSET * 2 * (p.parallelIndex || 0);
+            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', base);
+            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', base + PARALLEL_OFFSET);
         });
         ctx.restore();
     }
@@ -591,6 +591,7 @@ window.addEventListener('load', () => {
     }
 
     const SNAP_DIST = 10;
+    // Distance in pixels between adjacent pipes in a shared corridor
     const PARALLEL_OFFSET = 6;
 
     function snapAngle(dx, dy) {
@@ -1188,11 +1189,24 @@ window.addEventListener('load', () => {
     }
 
     // Generate a serpentine loop for a polygonal zone by creating a
-    // rectangular loop and clipping it to the polygon.
+    // rectangular loop and clipping it to the polygon. The resulting
+    // path always starts and ends at the entry point so the circuit is
+    // closed even when clipping removes outer segments.
     function zoneLoopPath(zone, spacing, entry) {
         const rect = zoneBounds(zone);
         const raw = zoneLoopRect(rect, spacing, entry);
-        return clipPathToPolygon(raw, zone.points);
+        let clipped = clipPathToPolygon(raw, zone.points);
+        if (!clipped.length) clipped = raw.slice();
+        const eps = 1e-6;
+        const start = { x: entry.x, y: entry.y };
+        if (Math.hypot(clipped[0].x - start.x, clipped[0].y - start.y) > eps) {
+            clipped.unshift(start);
+        }
+        const last = clipped[clipped.length - 1];
+        if (Math.hypot(last.x - start.x, last.y - start.y) > eps) {
+            clipped.push(start);
+        }
+        return simplifyPath(clipped);
     }
 
     // Adjust wall endpoints so nearby walls meet seamlessly
