@@ -359,13 +359,19 @@ window.addEventListener('load', () => {
         // distributors
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
         currentFloor.distributors.forEach(d => {
+            const corners = distributorCorners(d);
+            const pos = distributorPosition(d);
             ctx.fillStyle = d === selectedDistributor ? 'rgba(0,0,255,0.5)' : 'rgba(0,0,255,0.3)';
-            ctx.fillRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
+            ctx.closePath();
+            ctx.fill();
             ctx.strokeStyle = d === selectedDistributor ? 'red' : '#000';
-            ctx.strokeRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
+            ctx.stroke();
             if (d.name) {
                 ctx.fillStyle = '#000';
-                ctx.fillText(d.name, d.x - d.width / 2 + 2, d.y - d.height / 2 + 12);
+                ctx.fillText(d.name, pos.x + 2, pos.y + 12);
             }
         });
 
@@ -393,8 +399,9 @@ window.addEventListener('load', () => {
             const dist = currentFloor.distributors[zone.distributorId || 0];
             if (!dist) return;
 
-            const entry = closestPointOnRect(rect, dist.x, dist.y);
-            let toEntry = findPath({ x: dist.x, y: dist.y }, entry);
+            const distPos = distributorPort(dist);
+            const entry = closestPointOnRect(rect, distPos.x, distPos.y);
+            let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry);
             if (!toEntry) {
                 alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
                 return;
@@ -615,6 +622,91 @@ window.addEventListener('load', () => {
         return (w.doors || []).some(d =>
             along >= d.offset - d.width/2 && along <= d.offset + d.width/2
         );
+    }
+
+    function wallHitInfo(x, y) {
+        for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
+            const w = currentFloor.walls[i];
+            const len = wallLength(w);
+            const dist = distanceToSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+            if (dist <= (w.thickness || defaultWallThickness) / 2 + SNAP_DIST) {
+                const t = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+                const along = t * len;
+                const ux = (w.x2 - w.x1) / len;
+                const uy = (w.y2 - w.y1) / len;
+                const nx = -uy;
+                const ny = ux;
+                const px = w.x1 + ux * along;
+                const py = w.y1 + uy * along;
+                const sign = ((x - px) * nx + (y - py) * ny) >= 0 ? 1 : -1;
+                return { wall: w, index: i, along, sign };
+            }
+        }
+        return null;
+    }
+
+    function distributorPosition(d) {
+        if (d.wallId != null) {
+            const w = currentFloor.walls[d.wallId];
+            if (!w) return { x: d.x, y: d.y };
+            const len = wallLength(w);
+            const ux = (w.x2 - w.x1) / len;
+            const uy = (w.y2 - w.y1) / len;
+            const nx = -uy;
+            const ny = ux;
+            const thick = w.thickness || defaultWallThickness;
+            const centerOff = d.sign * (thick / 2 - d.height / 2);
+            return {
+                x: w.x1 + ux * d.offset + nx * centerOff,
+                y: w.y1 + uy * d.offset + ny * centerOff
+            };
+        }
+        return { x: d.x, y: d.y };
+    }
+
+    function distributorPort(d) {
+        if (d.wallId != null) {
+            const w = currentFloor.walls[d.wallId];
+            if (!w) return { x: d.x, y: d.y };
+            const len = wallLength(w);
+            const ux = (w.x2 - w.x1) / len;
+            const uy = (w.y2 - w.y1) / len;
+            const nx = -uy;
+            const ny = ux;
+            const thick = w.thickness || defaultWallThickness;
+            return {
+                x: w.x1 + ux * d.offset + nx * d.sign * (thick / 2),
+                y: w.y1 + uy * d.offset + ny * d.sign * (thick / 2)
+            };
+        }
+        return { x: d.x, y: d.y };
+    }
+
+    function distributorCorners(d) {
+        const pos = distributorPosition(d);
+        if (d.wallId != null) {
+            const w = currentFloor.walls[d.wallId];
+            if (!w) return [pos];
+            const len = wallLength(w);
+            const ux = (w.x2 - w.x1) / len;
+            const uy = (w.y2 - w.y1) / len;
+            const nx = -uy;
+            const ny = ux;
+            const hw = d.width / 2;
+            const hh = d.height / 2;
+            return [
+                { x: pos.x - ux * hw - nx * hh, y: pos.y - uy * hw - ny * hh },
+                { x: pos.x + ux * hw - nx * hh, y: pos.y + uy * hw - ny * hh },
+                { x: pos.x + ux * hw + nx * hh, y: pos.y + uy * hw + ny * hh },
+                { x: pos.x - ux * hw + nx * hh, y: pos.y - uy * hw + ny * hh }
+            ];
+        }
+        return [
+            { x: pos.x - d.width / 2, y: pos.y - d.height / 2 },
+            { x: pos.x + d.width / 2, y: pos.y - d.height / 2 },
+            { x: pos.x + d.width / 2, y: pos.y + d.height / 2 },
+            { x: pos.x - d.width / 2, y: pos.y + d.height / 2 }
+        ];
     }
 
     function segmentIntersectsWall(x1, y1, x2, y2) {
@@ -1012,11 +1104,23 @@ window.addEventListener('load', () => {
         return null;
     }
 
+    function pointInRect(p, pts) {
+        let inside = false;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+            const xi = pts[i].x, yi = pts[i].y;
+            const xj = pts[j].x, yj = pts[j].y;
+            const intersect = ((yi > p.y) !== (yj > p.y)) &&
+                (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
     function hitTestDistributor(x, y) {
         for (let i = currentFloor.distributors.length - 1; i >= 0; i--) {
             const d = currentFloor.distributors[i];
-            if (x >= d.x - d.width / 2 && x <= d.x + d.width / 2 &&
-                y >= d.y - d.height / 2 && y <= d.y + d.height / 2) {
+            const pts = distributorCorners(d);
+            if (pointInRect({x, y}, pts)) {
                 return d;
             }
         }
@@ -1116,12 +1220,17 @@ window.addEventListener('load', () => {
             return;
         } else if (mode === 'distributor') {
             const width = parseFloat(prompt('Width (m)?', '0.3')) || 0.3;
-            const height = parseFloat(prompt('Height (m)?', '0.1')) || 0.1;
+            const height = parseFloat(prompt('Depth (m)?', '0.1')) || 0.1;
             const pxWidth = width * pixelsPerMeter;
             const pxHeight = height * pixelsPerMeter;
             const name = prompt('Name?', `D${currentFloor.distributors.length + 1}`) || '';
             const connections = parseInt(prompt('Connections?', '2'), 10) || 2;
-            currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
+            const hit = wallHitInfo(startX, startY);
+            if (hit) {
+                currentFloor.distributors.push({ wallId: hit.index, offset: hit.along, sign: hit.sign, width: pxWidth, height: pxHeight, name, connections });
+            } else {
+                currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
+            }
             drawAll();
         } else if (mode === 'door') {
             const hit = hitTestWall(startX, startY);
@@ -1249,10 +1358,26 @@ window.addEventListener('load', () => {
                 startY = y;
                 drawAll();
             } else if (mode === 'select' && selectedDistributor && dragMode === 'moveDistributor') {
-                const dx = x - startX;
-                const dy = y - startY;
-                selectedDistributor.x += dx;
-                selectedDistributor.y += dy;
+                if (selectedDistributor.wallId != null) {
+                    const w = currentFloor.walls[selectedDistributor.wallId];
+                    const len = wallLength(w);
+                    const t = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+                    selectedDistributor.offset = t * len;
+                    const ux = (w.x2 - w.x1) / len;
+                    const uy = (w.y2 - w.y1) / len;
+                    const nx = -uy;
+                    const ny = ux;
+                    const px = w.x1 + ux * selectedDistributor.offset;
+                    const py = w.y1 + uy * selectedDistributor.offset;
+                    selectedDistributor.sign = ((x - px) * nx + (y - py) * ny) >= 0 ? 1 : -1;
+                } else {
+                    const dx = x - startX;
+                    const dy = y - startY;
+                    selectedDistributor.x += dx;
+                    selectedDistributor.y += dy;
+                    startX = x;
+                    startY = y;
+                }
                 startX = x;
                 startY = y;
                 drawAll();
@@ -1320,10 +1445,10 @@ window.addEventListener('load', () => {
         } else if (d) {
             d.name = prompt('Name?', d.name || '') || d.name;
             const width = parseFloat(prompt('Width (m)?', (d.width/pixelsPerMeter).toFixed(2)), 10);
-            const height = parseFloat(prompt('Height (m)?', (d.height/pixelsPerMeter).toFixed(2)), 10);
+            const depth = parseFloat(prompt('Depth (m)?', (d.height/pixelsPerMeter).toFixed(2)), 10);
             const connections = parseInt(prompt('Connections?', d.connections), 10);
             if (!isNaN(width)) d.width = width * pixelsPerMeter;
-            if (!isNaN(height)) d.height = height * pixelsPerMeter;
+            if (!isNaN(depth)) d.height = depth * pixelsPerMeter;
             if (!isNaN(connections)) d.connections = connections;
             drawAll();
         } else if (doorHit) {
