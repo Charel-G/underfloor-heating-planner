@@ -1083,7 +1083,9 @@ window.addEventListener('load', () => {
 
     // Create a serpentine loop for a rectangular area. The loop starts
     // at `entry`, winds back and forth inside `rect`, and returns to the
-    // entry point.
+    // entry point. The first serpentine segment begins from the entry
+    // side rather than a corner so the layout looks more natural when
+    // pipes enter through a doorway.
     function zoneLoopRect(rect, spacing, entry) {
         const path = [{ x: entry.x, y: entry.y }];
         const inner = {
@@ -1096,39 +1098,53 @@ window.addEventListener('load', () => {
             path.push({ x: entry.x, y: entry.y });
             return path;
         }
+
         const eps = spacing / 2;
         const onTop = Math.abs(entry.y - rect.y) < eps;
         const onBottom = Math.abs(entry.y - (rect.y + rect.height)) < eps;
+        const onLeft = Math.abs(entry.x - rect.x) < eps;
+        const onRight = Math.abs(entry.x - (rect.x + rect.width)) < eps;
         const horizontal = onTop || onBottom;
 
         if (horizontal) {
-            const startY = onTop ? inner.y : inner.y + inner.height;
-            path.push({ x: entry.x, y: startY });
-            let y = startY;
-            let dirRight = onTop ? true : false;
+            // move inside by one spacing
+            let y = onTop ? inner.y : inner.y + inner.height;
+            path.push({ x: entry.x, y });
+            // approach the nearest side to begin the serpentine
+            const leftX = inner.x;
+            const rightX = inner.x + inner.width;
+            let x =
+                Math.abs(entry.x - leftX) <= Math.abs(entry.x - rightX)
+                    ? leftX
+                    : rightX;
+            if (x !== entry.x) path.push({ x, y });
+            let dirRight = x === leftX;
             while (true) {
-                const targetX = dirRight ? inner.x + inner.width : inner.x;
+                const targetX = dirRight ? rightX : leftX;
                 path.push({ x: targetX, y });
                 const nextY = onTop ? y + spacing : y - spacing;
-                if (nextY < inner.y || nextY > inner.y + inner.height) {
-                    break;
-                }
+                if (nextY < inner.y || nextY > inner.y + inner.height) break;
                 path.push({ x: targetX, y: nextY });
                 y = nextY;
                 dirRight = !dirRight;
             }
         } else {
-            const startX = entry.x === rect.x ? inner.x : inner.x + inner.width;
-            path.push({ x: startX, y: entry.y });
-            let x = startX;
-            let dirDown = entry.x === rect.x;
+            // entry on left or right edge
+            let x = onLeft ? inner.x : inner.x + inner.width;
+            path.push({ x, y: entry.y });
+            const topY = inner.y;
+            const botY = inner.y + inner.height;
+            let y =
+                Math.abs(entry.y - topY) <= Math.abs(entry.y - botY)
+                    ? topY
+                    : botY;
+            if (y !== entry.y) path.push({ x, y });
+            let dirDown = y === topY;
             while (true) {
-                const targetY = dirDown ? inner.y + inner.height : inner.y;
+                const targetY = dirDown ? botY : topY;
                 path.push({ x, y: targetY });
-                const nextX = entry.x === rect.x ? x + spacing : x - spacing;
-                if (nextX < inner.x || nextX > inner.x + inner.width) {
-                    break;
-                }
+                const nextX = onLeft ? x + spacing : x - spacing;
+                if (nextX < inner.x || nextX > inner.x + inner.width) break;
                 path.push({ x: nextX, y: targetY });
                 x = nextX;
                 dirDown = !dirDown;
