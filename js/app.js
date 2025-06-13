@@ -46,6 +46,8 @@ window.addEventListener('load', () => {
     let drawing = false;
     let startX = 0;
     let startY = 0;
+    let wallStart = null; // last point when drawing consecutive walls
+    let mouseWorld = { x: 0, y: 0 }; // track mouse position for previews
     let selectedWall = null;
     let selectedZone = null;
     let selectedDistributor = null;
@@ -199,6 +201,14 @@ window.addEventListener('load', () => {
     document.addEventListener('keydown', e => {
         if (e.key === 'Delete') {
             deleteSelected();
+        } else if (e.key === 'Escape') {
+            if (mode === 'wall') {
+                wallStart = null;
+                drawAll();
+            } else if (mode === 'zone') {
+                zoneDrawing = null;
+                drawAll();
+            }
         }
     });
 
@@ -297,7 +307,20 @@ window.addEventListener('load', () => {
             for (let i = 1; i < zoneDrawing.length; i++) {
                 ctx.lineTo(zoneDrawing[i].x, zoneDrawing[i].y);
             }
+            const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
+            ctx.lineTo(snap.x, snap.y);
             ctx.strokeStyle = 'red';
+            ctx.stroke();
+        }
+
+        if (wallStart && mode === 'wall') {
+            const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
+            const ang = snapAngle(snap.x - wallStart.x, snap.y - wallStart.y);
+            const end = snapToPoints(wallStart.x + ang.dx, wallStart.y + ang.dy);
+            ctx.strokeStyle = 'red';
+            ctx.beginPath();
+            ctx.moveTo(wallStart.x, wallStart.y);
+            ctx.lineTo(end.x, end.y);
             ctx.stroke();
         }
         // distributors
@@ -994,15 +1017,48 @@ window.addEventListener('load', () => {
         startX = world.x;
         startY = world.y;
         if (mode === 'wall') {
-            drawing = true;
+            const snap = snapToPoints(startX, startY);
+            if (!wallStart) {
+                wallStart = snap;
+            } else {
+                const ang = snapAngle(snap.x - wallStart.x, snap.y - wallStart.y);
+                const end = snapToPoints(wallStart.x + ang.dx, wallStart.y + ang.dy);
+                currentFloor.walls.push({
+                    x1: wallStart.x,
+                    y1: wallStart.y,
+                    x2: end.x,
+                    y2: end.y,
+                    thickness: defaultWallThickness,
+                    doors: []
+                });
+                wallStart = end;
+                connectWalls();
+            }
+            drawAll();
+            return;
         } else if (mode === 'zone') {
             const snap = snapToPoints(startX, startY);
             if (!zoneDrawing) {
                 zoneDrawing = [snap];
+            } else if (zoneDrawing.length >= 2 && Math.hypot(snap.x - zoneDrawing[0].x, snap.y - zoneDrawing[0].y) < SNAP_DIST) {
+                const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
+                const spacingMm = parseInt(prompt('Pipe spacing (mm)?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || 0;
+                const spacing = spacingMm / 1000 * pixelsPerMeter;
+                let distributorId = null;
+                if (currentFloor.distributors.length > 0) {
+                    const list = currentFloor.distributors.map((d,i)=>`${i}: ${d.name}`).join('\n');
+                    const ans = prompt('Distributor index:\n' + list, '0');
+                    const idx = parseInt(ans, 10);
+                    if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
+                }
+                const points = zoneDrawing.slice();
+                currentFloor.zones.push({ points, name, spacing, distributorId });
+                zoneDrawing = null;
+            } else {
+                zoneDrawing.push(snap);
             }
-            startX = zoneDrawing[zoneDrawing.length - 1].x;
-            startY = zoneDrawing[zoneDrawing.length - 1].y;
-            drawing = true;
+            drawAll();
+            return;
         } else if (mode === 'distributor') {
             const width = parseFloat(prompt('Width (m)?', '0.3')) || 0.3;
             const height = parseFloat(prompt('Height (m)?', '0.1')) || 0.1;
@@ -1081,95 +1137,81 @@ window.addEventListener('load', () => {
     });
 
     canvas.addEventListener('mousemove', e => {
-        if (!drawing) return;
         const rect = canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
         const pos = screenToWorld(sx, sy);
         const x = pos.x;
         const y = pos.y;
-        if (mode === 'pan') {
-            const dx = sx - startX;
-            const dy = sy - startY;
-            offsetX += dx;
-            offsetY += dy;
-            startX = sx;
-            startY = sy;
-            drawAll();
-            return;
-        }
-        drawAll();
-        if (mode === 'wall') {
-            const snap = snapAngle(x - startX, y - startY);
-            const snapped = snapToPoints(startX + snap.dx, startY + snap.dy);
-            ctx.strokeStyle = 'red';
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(snapped.x, snapped.y);
-            ctx.stroke();
-        } else if (mode === 'zone') {
-            if (!zoneDrawing) return;
-            ctx.strokeStyle = 'red';
-            const snap = snapToPoints(x, y);
-            ctx.beginPath();
-            ctx.moveTo(zoneDrawing[0].x, zoneDrawing[0].y);
-            for (let i = 1; i < zoneDrawing.length; i++) {
-                ctx.lineTo(zoneDrawing[i].x, zoneDrawing[i].y);
+        mouseWorld.x = x;
+        mouseWorld.y = y;
+        if (drawing) {
+            if (mode === 'pan') {
+                const dx = sx - startX;
+                const dy = sy - startY;
+                offsetX += dx;
+                offsetY += dy;
+                startX = sx;
+                startY = sy;
+                drawAll();
+                return;
             }
-            ctx.lineTo(snap.x, snap.y);
-            ctx.stroke();
-        } else if (mode === 'select' && selectedWall) {
-            if (dragMode === 'move') {
+            if (mode === 'select' && selectedWall) {
+                if (dragMode === 'move') {
+                    const dx = x - startX;
+                    const dy = y - startY;
+                    selectedWall.x1 += dx;
+                    selectedWall.y1 += dy;
+                    selectedWall.x2 += dx;
+                    selectedWall.y2 += dy;
+                    startX = x;
+                    startY = y;
+                    lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
+                    drawAll();
+                } else if (dragMode === 'end1' || dragMode === 'end2') {
+                    const anchorX = dragMode === 'end1' ? selectedWall.x2 : selectedWall.x1;
+                    const anchorY = dragMode === 'end1' ? selectedWall.y2 : selectedWall.y1;
+                    const snap = snapAngle(x - anchorX, y - anchorY);
+                    const snapped = snapToPoints(anchorX + snap.dx, anchorY + snap.dy);
+                    if (dragMode === 'end1') {
+                        selectedWall.x1 = snapped.x;
+                        selectedWall.y1 = snapped.y;
+                    } else {
+                        selectedWall.x2 = snapped.x;
+                        selectedWall.y2 = snapped.y;
+                    }
+                    lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
+                    drawAll();
+                }
+            } else if (mode === 'select' && selectedZone && dragMode === 'moveZone') {
                 const dx = x - startX;
                 const dy = y - startY;
-                selectedWall.x1 += dx;
-                selectedWall.y1 += dy;
-                selectedWall.x2 += dx;
-                selectedWall.y2 += dy;
+                selectedZone.points.forEach(p => {
+                    p.x += dx;
+                    p.y += dy;
+                });
                 startX = x;
                 startY = y;
-                lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
                 drawAll();
-            } else if (dragMode === 'end1' || dragMode === 'end2') {
-                const anchorX = dragMode === 'end1' ? selectedWall.x2 : selectedWall.x1;
-                const anchorY = dragMode === 'end1' ? selectedWall.y2 : selectedWall.y1;
-                const snap = snapAngle(x - anchorX, y - anchorY);
-                const snapped = snapToPoints(anchorX + snap.dx, anchorY + snap.dy);
-                if (dragMode === 'end1') {
-                    selectedWall.x1 = snapped.x;
-                    selectedWall.y1 = snapped.y;
-                } else {
-                    selectedWall.x2 = snapped.x;
-                    selectedWall.y2 = snapped.y;
-                }
-                lengthInput.value = wallLengthMeters(selectedWall).toFixed(2);
+            } else if (mode === 'select' && selectedDistributor && dragMode === 'moveDistributor') {
+                const dx = x - startX;
+                const dy = y - startY;
+                selectedDistributor.x += dx;
+                selectedDistributor.y += dy;
+                startX = x;
+                startY = y;
+                drawAll();
+            } else if (mode === 'select' && selectedDoor && dragMode === 'moveDoor') {
+                const w = selectedWall;
+                const len = wallLength(w);
+                const proj = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2) * len;
+                selectedDoor.offset = proj;
+                startX = x;
+                startY = y;
                 drawAll();
             }
-        } else if (mode === 'select' && selectedZone && dragMode === 'moveZone') {
-            const dx = x - startX;
-            const dy = y - startY;
-            selectedZone.points.forEach(p => {
-                p.x += dx;
-                p.y += dy;
-            });
-            startX = x;
-            startY = y;
-            drawAll();
-        } else if (mode === 'select' && selectedDistributor && dragMode === 'moveDistributor') {
-            const dx = x - startX;
-            const dy = y - startY;
-            selectedDistributor.x += dx;
-            selectedDistributor.y += dy;
-            startX = x;
-            startY = y;
-            drawAll();
-        } else if (mode === 'select' && selectedDoor && dragMode === 'moveDoor') {
-            const w = selectedWall;
-            const len = wallLength(w);
-            const proj = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2) * len;
-            selectedDoor.offset = proj;
-            startX = x;
-            startY = y;
+        } else {
+            // just update preview
             drawAll();
         }
     });
@@ -1186,45 +1228,7 @@ window.addEventListener('load', () => {
         if (mode === 'pan') {
             return;
         }
-        if (mode === 'wall') {
-            const snap = snapAngle(x - startX, y - startY);
-            const snapped = snapToPoints(startX + snap.dx, startY + snap.dy);
-            currentFloor.walls.push({
-                x1: startX,
-                y1: startY,
-                x2: snapped.x,
-                y2: snapped.y,
-                thickness: defaultWallThickness,
-                doors: []
-            });
-        } else if (mode === 'zone') {
-            if (!zoneDrawing) return;
-            const snap = snapToPoints(x, y);
-            const first = zoneDrawing[0];
-            if (zoneDrawing.length >= 2 && Math.hypot(snap.x - first.x, snap.y - first.y) < SNAP_DIST) {
-                // close polygon
-                const name = prompt('Zone name?', `Zone ${currentFloor.zones.length + 1}`) || '';
-                const spacingMm = parseInt(prompt('Pipe spacing (mm)?', spacingInput.value), 10) || parseInt(spacingInput.value, 10) || 0;
-                const spacing = spacingMm / 1000 * pixelsPerMeter;
-                let distributorId = null;
-                if (currentFloor.distributors.length > 0) {
-                    const list = currentFloor.distributors.map((d,i) => `${i}: ${d.name}`).join('\n');
-                    const ans = prompt('Distributor index:\n' + list, '0');
-                    const idx = parseInt(ans, 10);
-                    if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
-                }
-                const points = zoneDrawing.slice();
-                currentFloor.zones.push({ points, name, spacing, distributorId });
-                zoneDrawing = null;
-            } else {
-                zoneDrawing.push(snap);
-                startX = snap.x;
-                startY = snap.y;
-                drawing = false;
-                drawAll();
-                return;
-            }
-        } else if (mode === 'select') {
+        if (mode === 'select') {
             lengthInput.value = selectedWall ? wallLengthMeters(selectedWall).toFixed(2) : '';
         }
         dragMode = null;
