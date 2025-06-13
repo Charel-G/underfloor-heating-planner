@@ -306,10 +306,10 @@ window.addEventListener('load', () => {
 
     function drawAll() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
         ctx.save();
         ctx.translate(offsetX, offsetY);
-        drawGrid();
-        if (!currentFloor) return;
+        if (!currentFloor) { ctx.restore(); return; }
         ctx.strokeStyle = '#000';
         // walls
         currentFloor.walls.forEach(w => {
