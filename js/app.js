@@ -259,14 +259,21 @@ window.addEventListener('load', () => {
     function drawGrid() {
         ctx.strokeStyle = '#ccc';
         ctx.beginPath();
-        for (let x = -offsetX % gridSize; x <= canvas.width; x += gridSize) {
+
+        let startX = (-offsetX) % gridSize;
+        if (startX > 0) startX -= gridSize;
+        for (let x = startX; x <= canvas.width; x += gridSize) {
             ctx.moveTo(x, 0);
             ctx.lineTo(x, canvas.height);
         }
-        for (let y = -offsetY % gridSize; y <= canvas.height; y += gridSize) {
+
+        let startY = (-offsetY) % gridSize;
+        if (startY > 0) startY -= gridSize;
+        for (let y = startY; y <= canvas.height; y += gridSize) {
             ctx.moveTo(0, y);
             ctx.lineTo(canvas.width, y);
         }
+
         ctx.stroke();
     }
 
