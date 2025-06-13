@@ -465,9 +465,11 @@ window.addEventListener('load', () => {
         ctx.restore();
 
         if (lengthInfo) {
-            const len = Math.hypot(lengthInfo.end.x - lengthInfo.start.x, lengthInfo.end.y - lengthInfo.start.y) / pixelsPerMeter;
-            const sx = lengthInfo.end.x + offsetX;
-            const sy = lengthInfo.end.y + offsetY;
+            const len = Math.hypot(lengthInfo.end.x - lengthInfo.start.x,
+                                   lengthInfo.end.y - lengthInfo.start.y) / pixelsPerMeter;
+            const rect = canvas.getBoundingClientRect();
+            const sx = rect.left + window.scrollX + lengthInfo.end.x + offsetX;
+            const sy = rect.top + window.scrollY + lengthInfo.end.y + offsetY;
             lengthBox.textContent = len.toFixed(2) + ' m';
             lengthBox.style.left = sx + 'px';
             lengthBox.style.top = (sy - 10) + 'px';
