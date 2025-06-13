@@ -446,8 +446,9 @@ window.addEventListener('load', () => {
 
         // pipes
         currentFloor.pipes.forEach(p => {
-            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', 0);
-            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', 4);
+            const off = PARALLEL_OFFSET * (p.parallelIndex || 0);
+            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', off);
+            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', off + 4);
         });
         ctx.restore();
     }
@@ -517,6 +518,7 @@ window.addEventListener('load', () => {
     function generatePipes() {
         if (!currentFloor) return;
         currentFloor.pipes = [];
+        const segmentCounts = new Map();
         currentFloor.zones.forEach(zone => {
             const rect = zoneBounds(zone);
             const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
@@ -547,7 +549,20 @@ window.addEventListener('load', () => {
             }
 
             const length = pathLength(supplyPath) + pathLength(returnPath);
-            currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length });
+
+            let parallelIndex = 0;
+            for (let i = 0; i < toEntry.length - 1; i++) {
+                const key = segmentKey(toEntry[i], toEntry[i+1]);
+                const count = segmentCounts.get(key) || 0;
+                if (count > parallelIndex) parallelIndex = count;
+            }
+
+            currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length, parallelIndex });
+
+            for (let i = 0; i < toEntry.length - 1; i++) {
+                const key = segmentKey(toEntry[i], toEntry[i+1]);
+                segmentCounts.set(key, (segmentCounts.get(key) || 0) + 1);
+            }
         });
         drawAll();
     }
@@ -576,6 +591,7 @@ window.addEventListener('load', () => {
     }
 
     const SNAP_DIST = 10;
+    const PARALLEL_OFFSET = 6;
 
     function snapAngle(dx, dy) {
         const angle = Math.atan2(dy, dx);
@@ -1020,6 +1036,17 @@ window.addEventListener('load', () => {
             }
         }
         return true;
+    }
+
+    function segmentKey(a, b) {
+        const ax = a.x.toFixed(2);
+        const ay = a.y.toFixed(2);
+        const bx = b.x.toFixed(2);
+        const by = b.y.toFixed(2);
+        if (ax < bx || (ax === bx && ay <= by)) {
+            return `${ax},${ay},${bx},${by}`;
+        }
+        return `${bx},${by},${ax},${ay}`;
     }
 
     function drawWall(w, isSelected) {

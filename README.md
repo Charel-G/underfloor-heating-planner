@@ -17,6 +17,9 @@ line.  The return pipe retraces the original route back to the distributor, so
 no second loop is drawn inside the zone. The serpentine pattern is clipped to
 the actual zone polygon so irregular shapes like triangles do not produce pipes
 outside their boundaries.
+When several circuits must follow the same corridor from their distributor,
+each pair of pipes is offset to run alongside the others instead of sharing the
+exact same line.
 
 ## Features
 
@@ -34,6 +37,8 @@ outside their boundaries.
 - Automatic supply and return routing with serpentine filling that
   conforms to the zone shape
 - Pipes respect wall thickness and keep the loop one spacing away from zone edges
+- When different circuits share the same corridor, pipes are offset so each pair
+  runs parallel instead of overlapping
 - Toolbar buttons highlight when active and a **Center** button recenters the canvas
 - Generated pipes remain selectable objects and can be deleted
 - **Export** downloads an image and pipe length data per zone
