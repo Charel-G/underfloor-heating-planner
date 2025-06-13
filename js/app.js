@@ -470,7 +470,7 @@ window.addEventListener('load', () => {
             const sy = lengthInfo.end.y + offsetY;
             lengthBox.textContent = len.toFixed(2) + ' m';
             lengthBox.style.left = sx + 'px';
-            lengthBox.style.top = (sy - 20) + 'px';
+            lengthBox.style.top = (sy - 10) + 'px';
             lengthBox.style.display = 'block';
         }
     }
