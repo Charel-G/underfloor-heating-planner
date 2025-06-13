@@ -447,6 +447,62 @@ window.addEventListener('load', () => {
         return { x: cx, y: cy };
     }
 
+    function closestPointOnZone(zone, x, y) {
+        let best = null;
+        let bestDist = Infinity;
+        const pts = zone.points;
+        for (let i = 0; i < pts.length; i++) {
+            const a = pts[i];
+            const b = pts[(i + 1) % pts.length];
+            const t = projectionOnSegment(x, y, a.x, a.y, b.x, b.y);
+            const px = a.x + (b.x - a.x) * t;
+            const py = a.y + (b.y - a.y) * t;
+            const d = Math.hypot(px - x, py - y);
+            if (d < bestDist) {
+                bestDist = d;
+                best = { x: px, y: py };
+            }
+        }
+        return best;
+    }
+
+    function segmentPolygonIntersections(ax, ay, bx, by, poly) {
+        const pts = [];
+        for (let i = 0; i < poly.length; i++) {
+            const c = poly[i];
+            const d = poly[(i + 1) % poly.length];
+            const inter = lineIntersection(ax, ay, bx, by, c.x, c.y, d.x, d.y);
+            if (inter) {
+                pts.push({ x: inter.x, y: inter.y, t: inter.t1 });
+            }
+        }
+        pts.sort((a, b) => a.t - b.t);
+        return pts;
+    }
+
+    function clipPathToPolygon(path, poly) {
+        if (path.length < 2) return path;
+        const out = [];
+        for (let i = 0; i < path.length - 1; i++) {
+            const a = path[i];
+            const b = path[i + 1];
+            const insideA = pointInPolygon(a.x, a.y, poly);
+            const insideB = pointInPolygon(b.x, b.y, poly);
+            const inters = segmentPolygonIntersections(a.x, a.y, b.x, b.y, poly);
+            if (insideA) out.push(a);
+            inters.forEach(p => out.push({ x: p.x, y: p.y }));
+            if (insideB) out.push(b);
+        }
+        if (!out.length) return path;
+        const dedup = [out[0]];
+        for (let i = 1; i < out.length; i++) {
+            const prev = dedup[dedup.length - 1];
+            const p = out[i];
+            if (Math.hypot(prev.x - p.x, prev.y - p.y) > 1e-6) dedup.push(p);
+        }
+        return dedup;
+    }
+
     function generatePipes() {
         if (!currentFloor) return;
         currentFloor.pipes = [];
@@ -458,7 +514,7 @@ window.addEventListener('load', () => {
             if (!dist) return;
 
             const distPos = distributorPort(dist);
-            const entry = closestPointOnRect(rect, distPos.x, distPos.y);
+            const entry = closestPointOnZone(zone, distPos.x, distPos.y);
             let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry);
             if (!toEntry) {
                 alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
@@ -469,7 +525,7 @@ window.addEventListener('load', () => {
                 alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
                 return;
             }
-            const zonePath = zoneLoopPath(rect, spacing, entry);
+            const zonePath = zoneLoopPath(zone, spacing, entry);
 
             const supplyPath = toEntry.concat(zonePath);
             const returnPath = toEntry.slice().reverse();
@@ -1014,12 +1070,10 @@ window.addEventListener('load', () => {
         }
     }
 
-    // Create a serpentine loop that starts at the entry point and
-    // fills the zone before returning to the entry. The orientation of
-    // the loop depends on which wall the entry touches. If the entry is
-    // on the top or bottom, rows run horizontally; otherwise columns run
-    // vertically.
-    function zoneLoopPath(rect, spacing, entry) {
+    // Create a serpentine loop for a rectangular area. The loop starts
+    // at `entry`, winds back and forth inside `rect`, and returns to the
+    // entry point.
+    function zoneLoopRect(rect, spacing, entry) {
         const path = [{ x: entry.x, y: entry.y }];
         const inner = {
             x: rect.x + spacing,
@@ -1077,6 +1131,14 @@ window.addEventListener('load', () => {
             path.push({ x: entry.x, y: entry.y });
         }
         return path;
+    }
+
+    // Generate a serpentine loop for a polygonal zone by creating a
+    // rectangular loop and clipping it to the polygon.
+    function zoneLoopPath(zone, spacing, entry) {
+        const rect = zoneBounds(zone);
+        const raw = zoneLoopRect(rect, spacing, entry);
+        return clipPathToPolygon(raw, zone.points);
     }
 
     // Adjust wall endpoints so nearby walls meet seamlessly

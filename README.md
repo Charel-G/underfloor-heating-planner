@@ -11,7 +11,9 @@ After reaching the zone, only the supply line traces a serpentine loop.  The
 loop begins at the entry edge of the zone and runs in rows or columns
 depending on which wall is entered before returning to the point where the
 return line starts.  The return line then retraces the original route back to
-the distributor so no second loop is drawn inside the zone.
+the distributor so no second loop is drawn inside the zone. The serpentine
+pattern is clipped to the actual zone polygon so irregular shapes like
+triangles no longer produce pipes outside their boundaries.
 
 ## Features
 
@@ -25,7 +27,8 @@ the distributor so no second loop is drawn inside the zone.
 - Rectangular distributors with editable size, name and pipe connections that snap onto the clicked wall surface
 - A distributor list for each floor lets you select and delete distributors
 - Zones drawn as polygons assigned to a distributor and spacing
-- Automatic supply and return routing with serpentine filling
+- Automatic supply and return routing with serpentine filling that
+  conforms to the zone shape
 - Pipes respect wall thickness and keep the loop one spacing away from zone edges
 - Toolbar buttons highlight when active and a **Center** button recenters the canvas
 - Generated pipes remain selectable objects and can be deleted
