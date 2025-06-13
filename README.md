@@ -19,6 +19,7 @@ triangles no longer produce pipes outside their boundaries.
 
 - Multiple floors with add, rename and delete options
 - Walls snap to grid, intersections and existing points, and can be dragged or resized
+- A circle preview shows when a new wall snaps to an existing point or segment
 - Walls have adjustable thickness (default 0.25 m) and doorways can be dropped onto walls
 - Walls and zones can be drawn segment by segment: each click starts the next line from the previous end. Press **Esc** to finish drawing
 - Nearby wall endpoints automatically join to remove small gaps

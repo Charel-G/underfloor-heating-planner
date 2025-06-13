@@ -404,14 +404,25 @@ window.addEventListener('load', () => {
             ctx.stroke();
         }
 
+        let previewSnap = null;
+        if (mode === 'wall') {
+            previewSnap = snapToPoints(mouseWorld.x, mouseWorld.y);
+        }
+
         if (wallStart && mode === 'wall') {
-            const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
-            const ang = snapAngle(snap.x - wallStart.x, snap.y - wallStart.y);
+            const ang = snapAngle(previewSnap.x - wallStart.x, previewSnap.y - wallStart.y);
             const end = snapToPoints(wallStart.x + ang.dx, wallStart.y + ang.dy);
             ctx.strokeStyle = 'red';
             ctx.beginPath();
             ctx.moveTo(wallStart.x, wallStart.y);
             ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+        }
+
+        if (mode === 'wall' && previewSnap && previewSnap.snapped) {
+            ctx.strokeStyle = 'orange';
+            ctx.beginPath();
+            ctx.arc(previewSnap.x, previewSnap.y, 5, 0, Math.PI * 2);
             ctx.stroke();
         }
         // distributors
@@ -582,14 +593,21 @@ window.addEventListener('load', () => {
 
     function snapToPoints(x, y) {
         let sx = x, sy = y;
+        let best = Infinity;
+
+        function consider(px, py) {
+            const d = Math.hypot(px - x, py - y);
+            if (d < SNAP_DIST && d < best) {
+                sx = px;
+                sy = py;
+                best = d;
+            }
+        }
 
         // grid snapping
         const gx = Math.round(x / gridSize) * gridSize;
         const gy = Math.round(y / gridSize) * gridSize;
-        if (Math.hypot(gx - x, gy - y) < SNAP_DIST) {
-            sx = gx;
-            sy = gy;
-        }
+        consider(gx, gy);
 
         // snap to wall points
         currentFloor.walls.forEach(w => {
@@ -598,12 +616,13 @@ window.addEventListener('load', () => {
                 { x: w.x2, y: w.y2 },
                 { x: (w.x1 + w.x2) / 2, y: (w.y1 + w.y2) / 2 }
             ];
-            pts.forEach(p => {
-                if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
-                    sx = p.x;
-                    sy = p.y;
-                }
-            });
+            pts.forEach(p => consider(p.x, p.y));
+
+            // snap to nearest point on wall segment
+            const t = projectionOnSegment(x, y, w.x1, w.y1, w.x2, w.y2);
+            const px = w.x1 + (w.x2 - w.x1) * t;
+            const py = w.y1 + (w.y2 - w.y1) * t;
+            consider(px, py);
         });
 
         // snap to intersection points
@@ -612,24 +631,16 @@ window.addEventListener('load', () => {
                 const a = currentFloor.walls[i];
                 const b = currentFloor.walls[j];
                 const inter = lineIntersection(a.x1, a.y1, a.x2, a.y2, b.x1, b.y1, b.x2, b.y2);
-                if (inter && Math.hypot(inter.x - x, inter.y - y) < SNAP_DIST) {
-                    sx = inter.x;
-                    sy = inter.y;
-                }
+                if (inter) consider(inter.x, inter.y);
             }
         }
 
         // snap to zone vertices
         currentFloor.zones.forEach(z => {
-            z.points.forEach(p => {
-                if (Math.hypot(p.x - x, p.y - y) < SNAP_DIST) {
-                    sx = p.x;
-                    sy = p.y;
-                }
-            });
+            z.points.forEach(p => consider(p.x, p.y));
         });
 
-        return { x: sx, y: sy };
+        return { x: sx, y: sy, snapped: best < Infinity };
     }
 
     function wallLength(w) {
