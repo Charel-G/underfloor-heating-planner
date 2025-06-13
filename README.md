@@ -22,6 +22,12 @@ When several circuits must follow the same corridor from their distributor,
 each pair of pipes is offset to run alongside the others instead of sharing the
 exact same line.
 
+The planner now chooses entry points near doorways whenever possible and keeps
+pipes about 10–15 cm from walls. The serpentine pattern aligns with the longest
+wall of each room so the layout looks like a typical underfloor heating
+installation. Supply and return routes follow the shortest axis-aligned path
+back to the distributor and are drawn with separate offsets for clarity.
+
 ## Features
 
 - Multiple floors with add, rename and delete options
@@ -37,6 +43,9 @@ exact same line.
 - Zones drawn as polygons assigned to a distributor and spacing
 - Automatic supply and return routing with serpentine filling that
   conforms to the zone shape
+- Entry points are chosen near doorways and pipes maintain a 10–15 cm
+  clearance from walls
+- Serpentine rows align with the longest wall of each zone
 - Pipes respect wall thickness and keep the loop one spacing away from zone edges
 - When different circuits share the same corridor, pipes are offset in pairs so
   each supply and return line runs alongside its partner without overlapping
@@ -44,7 +53,7 @@ exact same line.
 - Generated pipes remain selectable objects and can be deleted
 - **Export** downloads an image and pipe length data per zone
 - If no valid path can be found between a distributor and a zone without
-  crossing walls, an alert is shown and no pipes are drawn
+  crossing walls, an alert is shown explaining why routing failed
 
 ## Usage
 

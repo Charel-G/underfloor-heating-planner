@@ -41,6 +41,7 @@ window.addEventListener('load', () => {
     const gridSize = 38; // grid spacing in pixels (0.5 m)
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let defaultWallThickness = 0.25 * pixelsPerMeter;
+    let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
     let offsetX = 0;
     let offsetY = 0;
     let floors = [];
@@ -478,6 +479,25 @@ window.addEventListener('load', () => {
         return best;
     }
 
+    function entryPointForZone(zone, from) {
+        let best = null;
+        let bestDist = Infinity;
+        currentFloor.walls.forEach(w => {
+            (w.doors || []).forEach(d => {
+                const doorPos = doorCenter(w, d);
+                const zonePt = closestPointOnZone(zone, doorPos.x, doorPos.y);
+                const dist = Math.hypot(doorPos.x - from.x, doorPos.y - from.y) +
+                             Math.hypot(zonePt.x - doorPos.x, zonePt.y - doorPos.y);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = zonePt;
+                }
+            });
+        });
+        if (!best) best = closestPointOnZone(zone, from.x, from.y);
+        return best;
+    }
+
     function segmentPolygonIntersections(ax, ay, bx, by, poly) {
         const pts = [];
         for (let i = 0; i < poly.length; i++) {
@@ -527,7 +547,7 @@ window.addEventListener('load', () => {
             if (!dist) return;
 
             const distPos = distributorPort(dist);
-            const entry = closestPointOnZone(zone, distPos.x, distPos.y);
+            const entry = entryPointForZone(zone, distPos);
             let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry);
             if (!toEntry) {
                 alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
@@ -766,6 +786,16 @@ window.addEventListener('load', () => {
         );
     }
 
+    function doorCenter(w, door) {
+        const len = wallLength(w);
+        const ux = (w.x2 - w.x1) / len;
+        const uy = (w.y2 - w.y1) / len;
+        return {
+            x: w.x1 + ux * door.offset,
+            y: w.y1 + uy * door.offset
+        };
+    }
+
     function wallHitInfo(x, y) {
         for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
             const w = currentFloor.walls[i];
@@ -937,19 +967,20 @@ window.addEventListener('load', () => {
         const bounds = floorBounds();
         if (lineClear(start, end)) return [start, end];
         const limit = farthestWallDistance(start) + step * 4;
-        const open = [{ x: start.x, y: start.y, g: 0, path: [start] }];
+        const TURN_PENALTY = step * 0.2;
+        const open = [{ x: start.x, y: start.y, g: 0, path: [start], dir: null }];
         const visited = new Set([
             `${Math.round(start.x/step)},${Math.round(start.y/step)}`
         ]);
         const gx = end.x;
         const gy = end.y;
         const dirs = [
-            [ step, 0, step ], [-step, 0, step],
-            [ 0, step, step ], [0,-step, step],
-            [ step, step, Math.SQRT2 * step ],
-            [ step,-step, Math.SQRT2 * step ],
-            [-step, step, Math.SQRT2 * step ],
-            [-step,-step, Math.SQRT2 * step ]
+            [ step, 0, step, 'E' ], [-step, 0, step, 'W' ],
+            [ 0, step, step, 'S' ], [0, -step, step, 'N' ],
+            [ step, step, Math.SQRT2 * step, 'SE' ],
+            [ step, -step, Math.SQRT2 * step, 'NE' ],
+            [ -step, step, Math.SQRT2 * step, 'SW' ],
+            [ -step, -step, Math.SQRT2 * step, 'NW' ]
         ];
         function heuristic(x,y) {
             return Math.abs(x - gx) + Math.abs(y - gy);
@@ -961,7 +992,7 @@ window.addEventListener('load', () => {
                 n.path.push({ x: end.x, y: end.y });
                 return simplifyPath(n.path);
             }
-            for (const [dx, dy, cost] of dirs) {
+            for (const [dx, dy, cost, dname] of dirs) {
                 const nx = n.x + dx;
                 const ny = n.y + dy;
                 const key = `${Math.round(nx/step)},${Math.round(ny/step)}`;
@@ -972,7 +1003,8 @@ window.addEventListener('load', () => {
                 if (Math.hypot(nx - start.x, ny - start.y) > limit)
                     continue;
                 visited.add(key);
-                open.push({ x: nx, y: ny, g: n.g + cost, path: n.path.concat([{ x: nx, y: ny }]) });
+                const turn = n.dir && n.dir !== dname ? TURN_PENALTY : 0;
+                open.push({ x: nx, y: ny, g: n.g + cost + turn, path: n.path.concat([{ x: nx, y: ny }]), dir: dname });
             }
         }
         return null;
@@ -1114,25 +1146,26 @@ window.addEventListener('load', () => {
     // entry point. The first serpentine segment begins from the entry
     // side rather than a corner so the layout looks more natural when
     // pipes enter through a doorway.
-    function zoneLoopRect(rect, spacing, entry) {
+    function zoneLoopRect(rect, spacing, entry, orientation) {
         const path = [{ x: entry.x, y: entry.y }];
+        const clearance = Math.max(spacing, entryClearance);
         const inner = {
-            x: rect.x + spacing,
-            y: rect.y + spacing,
-            width: rect.width - spacing * 2,
-            height: rect.height - spacing * 2
+            x: rect.x + clearance,
+            y: rect.y + clearance,
+            width: rect.width - clearance * 2,
+            height: rect.height - clearance * 2
         };
         if (inner.width <= 0 || inner.height <= 0) {
             path.push({ x: entry.x, y: entry.y });
             return path;
         }
 
-        const eps = spacing / 2;
+        const eps = clearance / 2;
         const onTop = Math.abs(entry.y - rect.y) < eps;
         const onBottom = Math.abs(entry.y - (rect.y + rect.height)) < eps;
         const onLeft = Math.abs(entry.x - rect.x) < eps;
         const onRight = Math.abs(entry.x - (rect.x + rect.width)) < eps;
-        const horizontal = onTop || onBottom;
+        const horizontal = orientation === 'horizontal';
 
         if (horizontal) {
             // move inside by one spacing
@@ -1194,7 +1227,8 @@ window.addEventListener('load', () => {
     // closed even when clipping removes outer segments.
     function zoneLoopPath(zone, spacing, entry) {
         const rect = zoneBounds(zone);
-        const raw = zoneLoopRect(rect, spacing, entry);
+        const orientation = rect.width >= rect.height ? 'horizontal' : 'vertical';
+        const raw = zoneLoopRect(rect, spacing, entry, orientation);
         let clipped = clipPathToPolygon(raw, zone.points);
         if (!clipped.length) clipped = raw.slice();
         const eps = 1e-6;
