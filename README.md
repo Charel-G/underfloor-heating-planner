@@ -29,6 +29,8 @@ the distributor so no second loop is drawn inside the zone.
 - Toolbar buttons highlight when active and a **Center** button recenters the canvas
 - Generated pipes remain selectable objects and can be deleted
 - **Export** downloads an image and pipe length data per zone
+- If no valid path can be found between a distributor and a zone without
+  crossing walls, an alert is shown and no pipes are drawn
 
 ## Usage
 

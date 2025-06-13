@@ -395,11 +395,24 @@ window.addEventListener('load', () => {
 
             const entry = closestPointOnRect(rect, dist.x, dist.y);
             let toEntry = findPath({ x: dist.x, y: dist.y }, entry);
+            if (!toEntry) {
+                alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                return;
+            }
             toEntry = expandDiagonals(toEntry);
+            if (!pathValid(toEntry)) {
+                alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                return;
+            }
             const zonePath = zoneLoopPath(rect, spacing, entry);
 
             const supplyPath = toEntry.concat(zonePath);
             const returnPath = toEntry.slice().reverse();
+
+            if (!pathValid(supplyPath) || !pathValid(returnPath)) {
+                alert(`Pipe layout for zone "${zone.name}" intersects a wall`);
+                return;
+            }
 
             const length = pathLength(supplyPath) + pathLength(returnPath);
             currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length });
@@ -727,7 +740,7 @@ window.addEventListener('load', () => {
                 open.push({ x: nx, y: ny, g: n.g + cost, path: n.path.concat([{ x: nx, y: ny }]) });
             }
         }
-        return [start, end];
+        return null;
     }
 
     function expandDiagonals(path) {
@@ -780,6 +793,15 @@ window.addEventListener('load', () => {
             len += Math.hypot(p2.x - p1.x, p2.y - p1.y);
         }
         return len / pixelsPerMeter;
+    }
+
+    function pathValid(path) {
+        for (let i = 0; i < path.length - 1; i++) {
+            if (segmentIntersectsWall(path[i].x, path[i].y, path[i+1].x, path[i+1].y)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     function drawWall(w, isSelected) {
