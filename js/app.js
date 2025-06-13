@@ -448,8 +448,9 @@ window.addEventListener('load', () => {
         // pipes
         currentFloor.pipes.forEach(p => {
             const base = PARALLEL_OFFSET * 2 * (p.parallelIndex || 0);
-            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', base);
-            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', base + PARALLEL_OFFSET);
+            drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', base, p.crossings || []);
+            const retCross = (p.crossings || []).map(i => p.returnPath.length - 2 - i);
+            drawPipePath(p.returnPath, p === selectedPipe ? 'orange' : 'blue', base + PARALLEL_OFFSET, retCross);
         });
         ctx.restore();
     }
@@ -539,50 +540,64 @@ window.addEventListener('load', () => {
         if (!currentFloor) return;
         currentFloor.pipes = [];
         const segmentCounts = new Map();
-        currentFloor.zones.forEach(zone => {
-            const rect = zoneBounds(zone);
-            const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
-            const spacing = zone.spacing || defSpacing || gridSize;
-            const dist = currentFloor.distributors[zone.distributorId || 0];
-            if (!dist) return;
 
-            const distPos = distributorPort(dist);
-            const entry = entryPointForZone(zone, distPos);
-            let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry);
-            if (!toEntry) {
-                alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
-                return;
-            }
-            toEntry = expandDiagonals(toEntry);
-            if (!pathValid(toEntry)) {
-                alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
-                return;
-            }
-            const zonePath = zoneLoopPath(zone, spacing, entry);
+        currentFloor.distributors.forEach((dist, idx) => {
+            const zoneList = currentFloor.zones.filter(z => z.distributorId === idx);
+            zoneList.sort((a,b)=>{
+                const pos = distributorPort(dist);
+                const ea = entryPointForZone(a, pos);
+                const eb = entryPointForZone(b, pos);
+                return Math.hypot(eb.x-pos.x, eb.y-pos.y) - Math.hypot(ea.x-pos.x, ea.y-pos.y);
+            });
 
-            const supplyPath = toEntry.concat(zonePath);
-            const returnPath = toEntry.slice().reverse();
+            zoneList.forEach(zone => {
+                const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
+                const spacing = zone.spacing || defSpacing || gridSize;
+                const distPos = distributorPort(dist);
+                const entry = entryPointForZone(zone, distPos);
 
-            if (!pathValid(supplyPath) || !pathValid(returnPath)) {
-                alert(`Pipe layout for zone "${zone.name}" intersects a wall`);
-                return;
-            }
+                let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: true, excludeZone: zone});
+                if (!toEntry) {
+                    toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: false});
+                }
+                if (!toEntry) {
+                    alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                    return;
+                }
+                toEntry = expandDiagonals(toEntry, {avoidZones: true, excludeZone: zone});
 
-            const length = pathLength(supplyPath) + pathLength(returnPath);
+                const crossings = zoneCrossingIndices(toEntry, zone);
 
-            let parallelIndex = 0;
-            for (let i = 0; i < toEntry.length - 1; i++) {
-                const key = segmentKey(toEntry[i], toEntry[i+1]);
-                const count = segmentCounts.get(key) || 0;
-                if (count > parallelIndex) parallelIndex = count;
-            }
+                if (!pathValid(toEntry, {avoidZones:false})) {
+                    alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                    return;
+                }
 
-            currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length, parallelIndex });
+                const zonePath = zoneLoopPath(zone, spacing, entry);
+                const supplyPath = toEntry.concat(zonePath);
+                const returnPath = toEntry.slice().reverse();
 
-            for (let i = 0; i < toEntry.length - 1; i++) {
-                const key = segmentKey(toEntry[i], toEntry[i+1]);
-                segmentCounts.set(key, (segmentCounts.get(key) || 0) + 1);
-            }
+                if (!pathValid(supplyPath, {avoidZones:false}) || !pathValid(returnPath, {avoidZones:false})) {
+                    alert(`Pipe layout for zone "${zone.name}" intersects a wall`);
+                    return;
+                }
+
+                const length = pathLength(supplyPath) + pathLength(returnPath);
+
+                let parallelIndex = 0;
+                for (let i = 0; i < toEntry.length - 1; i++) {
+                    const key = segmentKey(toEntry[i], toEntry[i+1]);
+                    const count = segmentCounts.get(key) || 0;
+                    if (count > parallelIndex) parallelIndex = count;
+                }
+
+                currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length, parallelIndex, crossings });
+
+                for (let i = 0; i < toEntry.length - 1; i++) {
+                    const key = segmentKey(toEntry[i], toEntry[i+1]);
+                    segmentCounts.set(key, (segmentCounts.get(key) || 0) + 1);
+                }
+            });
         });
         drawAll();
     }
@@ -909,6 +924,17 @@ window.addEventListener('load', () => {
         return false;
     }
 
+    function segmentIntersectsAnyZone(x1, y1, x2, y2, exclude) {
+        for (const z of currentFloor.zones) {
+            if (z === exclude) continue;
+            if (pointInPolygon(x1, y1, z.points) || pointInPolygon(x2, y2, z.points))
+                return true;
+            if (segmentPolygonIntersections(x1, y1, x2, y2, z.points).length)
+                return true;
+        }
+        return false;
+    }
+
     function floorBounds() {
         if (!currentFloor || currentFloor.walls.length === 0) {
             const range = 500 * pixelsPerMeter; // allow ~1 km square area
@@ -940,8 +966,10 @@ window.addEventListener('load', () => {
         return max;
     }
 
-    function lineClear(a, b) {
-        return !segmentIntersectsWall(a.x, a.y, b.x, b.y);
+    function lineClear(a, b, options = {}) {
+        if (segmentIntersectsWall(a.x, a.y, b.x, b.y)) return false;
+        if (options.avoidZones && segmentIntersectsAnyZone(a.x, a.y, b.x, b.y, options.excludeZone)) return false;
+        return true;
     }
 
     function simplifyPath(path) {
@@ -962,10 +990,19 @@ window.addEventListener('load', () => {
         return out;
     }
 
-    function findPath(start, end) {
+    function findPath(start, end, options = {}) {
         const step = gridSize / 2;
         const bounds = floorBounds();
-        if (lineClear(start, end)) return [start, end];
+        const avoidZones = options.avoidZones;
+        const excludeZone = options.excludeZone || null;
+
+        function segmentBlocked(ax, ay, bx, by) {
+            if (segmentIntersectsWall(ax, ay, bx, by)) return true;
+            if (avoidZones && segmentIntersectsAnyZone(ax, ay, bx, by, excludeZone)) return true;
+            return false;
+        }
+
+        if (!segmentBlocked(start.x, start.y, end.x, end.y)) return [start, end];
         const limit = farthestWallDistance(start) + step * 4;
         const TURN_PENALTY = step * 0.2;
         const open = [{ x: start.x, y: start.y, g: 0, path: [start], dir: null }];
@@ -997,7 +1034,7 @@ window.addEventListener('load', () => {
                 const ny = n.y + dy;
                 const key = `${Math.round(nx/step)},${Math.round(ny/step)}`;
                 if (visited.has(key)) continue;
-                if (segmentIntersectsWall(n.x, n.y, nx, ny)) continue;
+                if (segmentBlocked(n.x, n.y, nx, ny)) continue;
                 if (nx < bounds.minX - step || nx > bounds.maxX + step || ny < bounds.minY - step || ny > bounds.maxY + step)
                     continue;
                 if (Math.hypot(nx - start.x, ny - start.y) > limit)
@@ -1010,9 +1047,16 @@ window.addEventListener('load', () => {
         return null;
     }
 
-    function expandDiagonals(path) {
+    function expandDiagonals(path, options = {}) {
         if (path.length <= 1) return path;
         const out = [path[0]];
+        const avoidZones = options.avoidZones;
+        const excludeZone = options.excludeZone || null;
+        const block = (ax,ay,bx,by) => {
+            if (segmentIntersectsWall(ax,ay,bx,by)) return true;
+            if (avoidZones && segmentIntersectsAnyZone(ax,ay,bx,by,excludeZone)) return true;
+            return false;
+        };
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i];
             const p2 = path[i + 1];
@@ -1021,9 +1065,9 @@ window.addEventListener('load', () => {
             if (dx !== 0 && dy !== 0) {
                 const mid1 = { x: p2.x, y: p1.y };
                 const mid2 = { x: p1.x, y: p2.y };
-                if (!segmentIntersectsWall(p1.x, p1.y, mid1.x, mid1.y) && !segmentIntersectsWall(mid1.x, mid1.y, p2.x, p2.y)) {
+                if (!block(p1.x, p1.y, mid1.x, mid1.y) && !block(mid1.x, mid1.y, p2.x, p2.y)) {
                     out.push(mid1, p2);
-                } else if (!segmentIntersectsWall(p1.x, p1.y, mid2.x, mid2.y) && !segmentIntersectsWall(mid2.x, mid2.y, p2.x, p2.y)) {
+                } else if (!block(p1.x, p1.y, mid2.x, mid2.y) && !block(mid2.x, mid2.y, p2.x, p2.y)) {
                     out.push(mid2, p2);
                 } else {
                     out.push(p2);
@@ -1035,8 +1079,7 @@ window.addEventListener('load', () => {
         return simplifyPath(out);
     }
 
-    function drawPipePath(path, color, offset) {
-        ctx.strokeStyle = color;
+    function drawPipePath(path, color, offset, dashed = []) {
         for (let i = 0; i < path.length - 1; i++) {
             const p1 = path[i];
             const p2 = path[i + 1];
@@ -1048,7 +1091,16 @@ window.addEventListener('load', () => {
             ctx.beginPath();
             ctx.moveTo(p1.x + ox, p1.y + oy);
             ctx.lineTo(p2.x + ox, p2.y + oy);
-            ctx.stroke();
+            if (dashed.includes(i)) {
+                ctx.save();
+                ctx.setLineDash([6, 4]);
+                ctx.strokeStyle = '#800080';
+                ctx.stroke();
+                ctx.restore();
+            } else {
+                ctx.strokeStyle = color;
+                ctx.stroke();
+            }
         }
     }
 
@@ -1062,13 +1114,31 @@ window.addEventListener('load', () => {
         return len / pixelsPerMeter;
     }
 
-    function pathValid(path) {
+    function pathValid(path, options = {}) {
         for (let i = 0; i < path.length - 1; i++) {
             if (segmentIntersectsWall(path[i].x, path[i].y, path[i+1].x, path[i+1].y)) {
                 return false;
             }
+            if (options.avoidZones && segmentIntersectsAnyZone(path[i].x, path[i].y, path[i+1].x, path[i+1].y, options.excludeZone)) {
+                return false;
+            }
         }
         return true;
+    }
+
+    function zoneCrossingIndices(path, excludeZone) {
+        const indices = [];
+        for (let i = 0; i < path.length - 1; i++) {
+            for (const z of currentFloor.zones) {
+                if (z === excludeZone) continue;
+                if (pointInPolygon(path[i].x, path[i].y, z.points) || pointInPolygon(path[i+1].x, path[i+1].y, z.points) ||
+                    segmentPolygonIntersections(path[i].x, path[i].y, path[i+1].x, path[i+1].y, z.points).length) {
+                    indices.push(i);
+                    break;
+                }
+            }
+        }
+        return Array.from(new Set(indices));
     }
 
     function segmentKey(a, b) {
