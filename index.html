@@ -28,12 +28,13 @@
                     <button id="addDistributorBtn">Distributor</button>
                 </div>
                 <div class="tool-group">
-                    <button id="selectBtn">Select/Move</button>
                     <button id="panBtn">Pan</button>
                     <button id="centerBtn">Center</button>
-                    <button id="editDistributorBtn">Edit Distributor</button>
                 </div>
                 <div class="tool-group">
+                    <button id="selectBtn">Select/Move</button>
+                    <button id="deleteBtn">Delete</button>
+                    <button id="editDistributorBtn">Edit Distributor</button>
                     <label>Spacing (mm)
                         <input id="pipeSpacing" type="number" value="300" min="10" step="10">
                     </label>
@@ -46,12 +47,13 @@
                 </div>
                 <div class="tool-group">
                     <button id="generatePipesBtn">Generate Pipes</button>
-                    <button id="manualPipeBtn">Manual Pipe</button>
+                    <button id="manualPipeBtn">Draw Pipes</button>
+                </div>
+                <div class="tool-group">
                     <button id="exportBtn">Export</button>
                     <button id="importBtn">Import</button>
-                    <button id="fixWallsBtn">Fix Joints</button>
-                    <button id="deleteBtn">Delete</button>
                     <button id="clearBtn">Clear</button>
+                    <button id="fixWallsBtn" style="display:none">Fix Joints</button>
                 </div>
             </div>
             <canvas id="floorPlanCanvas"></canvas>
