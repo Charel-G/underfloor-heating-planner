@@ -45,6 +45,8 @@ window.addEventListener('load', () => {
 
     const gridSize = 38; // grid spacing in pixels (0.5 m)
     const pipeGrid = gridSize / 4; // finer grid for manual pipes
+    const SNAP_DIST = 10;
+    const PARALLEL_OFFSET = 6;
     const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let defaultWallThickness = 0.25 * pixelsPerMeter;
@@ -879,13 +881,6 @@ window.addEventListener('load', () => {
         dataLink.href = url;
         dataLink.download = 'floorplan-data.json';
         dataLink.click();
-        URL.revokeObjectURL(url);
-    }
-
-    const SNAP_DIST = 10;
-    // Distance in pixels between adjacent pipes in a shared corridor
-    const PARALLEL_OFFSET = 6;
-
     function snapAngle(dx, dy) {
         const angle = Math.atan2(dy, dx);
         const snap = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
