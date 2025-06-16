@@ -43,6 +43,7 @@ window.addEventListener('load', () => {
 
     const gridSize = 38; // grid spacing in pixels (0.5 m)
     const pipeGrid = gridSize / 4; // finer grid for manual pipes
+    const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
@@ -215,6 +216,8 @@ window.addEventListener('load', () => {
             if (!isNaN(width)) selectedDistributor.width = width * pixelsPerMeter;
             if (!isNaN(height)) selectedDistributor.height = height * pixelsPerMeter;
             if (!isNaN(connections)) selectedDistributor.connections = connections;
+            const minW = (selectedDistributor.connections + 1) * PORT_SPACING;
+            if (selectedDistributor.width < minW) selectedDistributor.width = minW;
             selectedDistributor.name = name;
             drawAll();
         }
@@ -848,8 +851,10 @@ window.addEventListener('load', () => {
         consider(gx, gy);
 
         currentFloor.distributors.forEach(d => {
-            const p = distributorPort(d);
-            consider(p.x, p.y);
+            for (let i = 0; i < (d.connections || 1); i++) {
+                const p = distributorPort(d, i);
+                consider(p.x, p.y);
+            }
         });
 
         currentFloor.zones.forEach(z => {
@@ -1017,7 +1022,7 @@ window.addEventListener('load', () => {
         return { x: d.x, y: d.y };
     }
 
-    function distributorPort(d) {
+    function distributorPort(d, index = 0) {
         if (d.wallId != null) {
             const w = currentFloor.walls[d.wallId];
             if (!w) return { x: d.x, y: d.y };
@@ -1027,12 +1032,18 @@ window.addEventListener('load', () => {
             const nx = -uy;
             const ny = ux;
             const thick = w.thickness || defaultWallThickness;
-            return {
-                x: w.x1 + ux * d.offset + nx * d.sign * (thick / 2),
-                y: w.y1 + uy * d.offset + ny * d.sign * (thick / 2)
-            };
+            const along = d.offset - d.width / 2 + PORT_SPACING + index * PORT_SPACING;
+            let px = w.x1 + ux * along + nx * d.sign * (thick / 2);
+            let py = w.y1 + uy * along + ny * d.sign * (thick / 2);
+            px = Math.round(px / pipeGrid) * pipeGrid;
+            py = Math.round(py / pipeGrid) * pipeGrid;
+            return { x: px, y: py };
         }
-        return { x: d.x, y: d.y };
+        let px = d.x - d.width / 2 + PORT_SPACING + index * PORT_SPACING;
+        let py = d.y;
+        px = Math.round(px / pipeGrid) * pipeGrid;
+        py = Math.round(py / pipeGrid) * pipeGrid;
+        return { x: px, y: py };
     }
 
     function distributorCorners(d) {
@@ -1683,7 +1694,9 @@ window.addEventListener('load', () => {
                 const dist = hitTestDistributor(startX, startY);
                 if (!dist) return;
                 const id = currentFloor.distributors.indexOf(dist);
-                pipeDrawing = { distributorId: id, points: [distributorPort(dist)] };
+                const idx = dist.nextPort || 0;
+                const start = distributorPort(dist, idx);
+                pipeDrawing = { distributorId: id, portIndex: idx, points: [start] };
             } else {
                 const prev = pipeDrawing.points[pipeDrawing.points.length-1];
                 const ang = snapAngle(snap.x - prev.x, snap.y - prev.y);
@@ -1694,6 +1707,8 @@ window.addEventListener('load', () => {
                     pipeDrawing.points[pipeDrawing.points.length-1] = closestPointOnZone(zone, end.x, end.y);
                     zone.manualPath = pipeDrawing.points.slice();
                     zone.distributorId = pipeDrawing.distributorId;
+                    const d = currentFloor.distributors[pipeDrawing.distributorId];
+                    if (d) d.nextPort = (pipeDrawing.portIndex || 0) + 1;
                     pipeDrawing = null;
                     drawAll();
                     return;
@@ -1708,12 +1723,16 @@ window.addEventListener('load', () => {
             const pxHeight = height * pixelsPerMeter;
             const name = prompt('Name?', `D${currentFloor.distributors.length + 1}`) || '';
             const connections = parseInt(prompt('Connections?', '2'), 10) || 2;
+            const minWidth = (connections + 1) * PORT_SPACING;
+            const finalWidth = Math.max(pxWidth, minWidth);
             const hit = wallHitInfo(startX, startY);
+            const distObj = { width: finalWidth, height: pxHeight, name, connections, nextPort: 0 };
             if (hit) {
-                currentFloor.distributors.push({ wallId: hit.index, offset: hit.along, sign: hit.sign, width: pxWidth, height: pxHeight, name, connections });
+                Object.assign(distObj, { wallId: hit.index, offset: hit.along, sign: hit.sign });
             } else {
-                currentFloor.distributors.push({ x: startX, y: startY, width: pxWidth, height: pxHeight, name, connections });
+                Object.assign(distObj, { x: startX, y: startY });
             }
+            currentFloor.distributors.push(distObj);
             updateDistributorList();
             drawAll();
         } else if (mode === 'door') {
@@ -1947,6 +1966,8 @@ window.addEventListener('load', () => {
             if (!isNaN(width)) d.width = width * pixelsPerMeter;
             if (!isNaN(depth)) d.height = depth * pixelsPerMeter;
             if (!isNaN(connections)) d.connections = connections;
+            const minW = (d.connections + 1) * PORT_SPACING;
+            if (d.width < minW) d.width = minW;
             drawAll();
         } else if (doorHit) {
             const newWidth = parseFloat(prompt('Door width (m)?', (doorHit.door.width / pixelsPerMeter).toFixed(2)), 10);
