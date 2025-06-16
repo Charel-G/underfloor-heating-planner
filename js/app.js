@@ -20,7 +20,7 @@ window.addEventListener('load', () => {
     const panBtn = document.getElementById('panBtn');
     const centerBtn = document.getElementById('centerBtn');
     const clearBtn = document.getElementById('clearBtn');
-    const drawPipesBtn = document.getElementById('drawPipesBtn');
+    const generatePipesBtn = document.getElementById('generatePipesBtn');
     const manualPipeBtn = document.getElementById('manualPipeBtn');
     const exportBtn = document.getElementById('exportBtn');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
@@ -552,6 +552,14 @@ window.addEventListener('load', () => {
             if (d.name) {
                 ctx.fillStyle = '#000';
                 ctx.fillText(d.name, pos.x + 2, pos.y + 12);
+            }
+        });
+
+        // manual pipe paths not yet generated
+        currentFloor.zones.forEach(z => {
+            if (z.manualPath && !currentFloor.pipes.some(p => p.zone === z)) {
+                drawPipePath(z.manualPath, 'red', 0);
+                drawPipePath(z.manualPath.slice().reverse(), 'blue', PARALLEL_OFFSET);
             }
         });
 
@@ -1687,7 +1695,7 @@ window.addEventListener('load', () => {
                     zone.manualPath = pipeDrawing.points.slice();
                     zone.distributorId = pipeDrawing.distributorId;
                     pipeDrawing = null;
-                    generatePipes();
+                    drawAll();
                     return;
                 }
             }
@@ -1904,7 +1912,7 @@ window.addEventListener('load', () => {
         drawAll();
     });
 
-    drawPipesBtn.addEventListener('click', generatePipes);
+    generatePipesBtn.addEventListener('click', generatePipes);
     manualPipeBtn.addEventListener('click', () => setMode('pipe'));
     exportBtn.addEventListener('click', exportPlan);
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
