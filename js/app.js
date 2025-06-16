@@ -59,7 +59,6 @@ window.addEventListener('load', () => {
     const SNAP_DIST = 10;
     const PARALLEL_OFFSET = 6;
     const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
-    const SEARCH_MARGIN = 4; // extra search radius in grid steps
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let scale = 1;
     let defaultWallThickness = 0.25 * pixelsPerMeter;
@@ -1383,17 +1382,6 @@ window.addEventListener('load', () => {
         return out;
     }
 
-    // simple priority queue for A* search
-    class PriorityQueue {
-        constructor() { this.items = []; }
-        push(node, score) {
-            this.items.push({ node, score });
-            this.items.sort((a, b) => a.score - b.score);
-        }
-        shift() { return this.items.shift().node; }
-        get length() { return this.items.length; }
-    }
-
     function findPath(start, end, options = {}) {
         const step = gridSize / 2;
         const bounds = floorBounds();
@@ -1407,33 +1395,24 @@ window.addEventListener('load', () => {
         }
 
         if (!segmentBlocked(start.x, start.y, end.x, end.y)) return [start, end];
-        const limit = farthestWallDistance(start) + step * SEARCH_MARGIN;
-        const TURN_PENALTY = step * 0.2;
-        const open = new PriorityQueue();
-        open.push({ x: start.x, y: start.y, g: 0, path: [start], dir: null }, 0);
+        const limit = farthestWallDistance(start);
+        const queue = [{ x: start.x, y: start.y, path: [start] }];
         const visited = new Set([
             `${Math.round(start.x/step)},${Math.round(start.y/step)}`
         ]);
-        const gx = end.x;
-        const gy = end.y;
         const dirs = [
-            [ step, 0, step, 'E' ], [-step, 0, step, 'W' ],
-            [ 0, step, step, 'S' ], [0, -step, step, 'N' ],
-            [ step, step, Math.SQRT2 * step, 'SE' ],
-            [ step, -step, Math.SQRT2 * step, 'NE' ],
-            [ -step, step, Math.SQRT2 * step, 'SW' ],
-            [ -step, -step, Math.SQRT2 * step, 'NW' ]
+            [ step, 0 ], [-step, 0 ],
+            [ 0, step ], [0, -step],
+            [ step, step ], [ step, -step ],
+            [ -step, step ], [ -step, -step ]
         ];
-        function heuristic(x,y) {
-            return Math.abs(x - gx) + Math.abs(y - gy);
-        }
-        while (open.length) {
-            const n = open.shift();
-            if (Math.abs(n.x - gx) < step/2 && Math.abs(n.y - gy) < step/2) {
+        while (queue.length) {
+            const n = queue.shift();
+            if (Math.abs(n.x - end.x) < step/2 && Math.abs(n.y - end.y) < step/2) {
                 n.path.push({ x: end.x, y: end.y });
                 return simplifyPath(n.path);
             }
-            for (const [dx, dy, cost, dname] of dirs) {
+            for (const [dx, dy] of dirs) {
                 const nx = n.x + dx;
                 const ny = n.y + dy;
                 const key = `${Math.round(nx/step)},${Math.round(ny/step)}`;
@@ -1444,10 +1423,7 @@ window.addEventListener('load', () => {
                 if (Math.hypot(nx - start.x, ny - start.y) > limit)
                     continue;
                 visited.add(key);
-                const turn = n.dir && n.dir !== dname ? TURN_PENALTY : 0;
-                const g = n.g + cost + turn;
-                const node = { x: nx, y: ny, g, path: n.path.concat([{ x: nx, y: ny }]), dir: dname };
-                open.push(node, g + heuristic(nx, ny));
+                queue.push({ x: nx, y: ny, path: n.path.concat([{ x: nx, y: ny }]) });
             }
         }
         return null;

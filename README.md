@@ -7,8 +7,8 @@ This repository contains a small HTML5 application for planning underfloor
 heating layouts. It supports multiple floors, snapping walls and zones,
 distributor rectangles and automatic pipe routing.
 The layout resizes with your browser window so the entire planner fits on screen.
-Pipes are drawn from each distributor to its zones using an A* search that
-explores eight directions. Diagonal steps are straightened into horizontal and
+Pipes are drawn from each distributor to its zones using a grid-based search
+that explores eight directions. Diagonal steps are broken into horizontal and
 vertical segments so the pipes never run at odd angles or through walls.
 After reaching the zone, only the supply line traces a serpentine loop. The
 loop now starts from the entry side itself—typically a doorway—and winds back
@@ -27,8 +27,8 @@ pipes about 10–15 cm from walls. The serpentine pattern aligns with the long
 wall of each room so the layout looks like a typical underfloor heating
 installation. Supply and return routes follow the shortest axis-aligned path
 back to the distributor and are drawn with separate offsets for clarity.
-The A* search is limited to the area around the building bounds so the planner
-does not waste time exploring far away from the floor plan.
+The search stays within the approximate building bounds so the planner does not
+waste time exploring far away from the floor plan.
 
 ## Features
 
