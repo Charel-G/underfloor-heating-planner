@@ -27,6 +27,8 @@ pipes about 10–15 cm from walls. The serpentine pattern aligns with the long
 wall of each room so the layout looks like a typical underfloor heating
 installation. Supply and return routes follow the shortest axis-aligned path
 back to the distributor and are drawn with separate offsets for clarity.
+The A* search is limited to the area around the building bounds so the planner
+does not waste time exploring far away from the floor plan.
 
 ## Features
 

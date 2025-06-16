@@ -50,6 +50,7 @@ window.addEventListener('load', () => {
     const SNAP_DIST = 10;
     const PARALLEL_OFFSET = 6;
     const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
+    const SEARCH_MARGIN = 4; // extra search radius in grid steps
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let scale = 1;
     let defaultWallThickness = 0.25 * pixelsPerMeter;
@@ -1353,6 +1354,17 @@ window.addEventListener('load', () => {
         return out;
     }
 
+    // simple priority queue for A* search
+    class PriorityQueue {
+        constructor() { this.items = []; }
+        push(node, score) {
+            this.items.push({ node, score });
+            this.items.sort((a, b) => a.score - b.score);
+        }
+        shift() { return this.items.shift().node; }
+        get length() { return this.items.length; }
+    }
+
     function findPath(start, end, options = {}) {
         const step = gridSize / 2;
         const bounds = floorBounds();
@@ -1366,9 +1378,10 @@ window.addEventListener('load', () => {
         }
 
         if (!segmentBlocked(start.x, start.y, end.x, end.y)) return [start, end];
-        const limit = farthestWallDistance(start) + step * 4;
+        const limit = farthestWallDistance(start) + step * SEARCH_MARGIN;
         const TURN_PENALTY = step * 0.2;
-        const open = [{ x: start.x, y: start.y, g: 0, path: [start], dir: null }];
+        const open = new PriorityQueue();
+        open.push({ x: start.x, y: start.y, g: 0, path: [start], dir: null }, 0);
         const visited = new Set([
             `${Math.round(start.x/step)},${Math.round(start.y/step)}`
         ]);
@@ -1386,7 +1399,6 @@ window.addEventListener('load', () => {
             return Math.abs(x - gx) + Math.abs(y - gy);
         }
         while (open.length) {
-            open.sort((a,b)=> (a.g + heuristic(a.x,a.y)) - (b.g + heuristic(b.x,b.y)));
             const n = open.shift();
             if (Math.abs(n.x - gx) < step/2 && Math.abs(n.y - gy) < step/2) {
                 n.path.push({ x: end.x, y: end.y });
@@ -1404,7 +1416,9 @@ window.addEventListener('load', () => {
                     continue;
                 visited.add(key);
                 const turn = n.dir && n.dir !== dname ? TURN_PENALTY : 0;
-                open.push({ x: nx, y: ny, g: n.g + cost + turn, path: n.path.concat([{ x: nx, y: ny }]), dir: dname });
+                const g = n.g + cost + turn;
+                const node = { x: nx, y: ny, g, path: n.path.concat([{ x: nx, y: ny }]), dir: dname };
+                open.push(node, g + heuristic(nx, ny));
             }
         }
         return null;
