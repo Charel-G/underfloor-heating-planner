@@ -881,6 +881,8 @@ window.addEventListener('load', () => {
         dataLink.href = url;
         dataLink.download = 'floorplan-data.json';
         dataLink.click();
+    }
+
     function snapAngle(dx, dy) {
         const angle = Math.atan2(dy, dx);
         const snap = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
