@@ -28,6 +28,7 @@ window.addEventListener('load', () => {
     const importBtn = document.getElementById('importBtn');
     const importFile = document.getElementById('importFile');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
+    const layerPanel = document.getElementById('layerPanel');
     const spacingInput = document.getElementById('pipeSpacing');
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
@@ -44,6 +45,14 @@ window.addEventListener('load', () => {
         pan: panBtn,
         pipe: manualPipeBtn
     });
+
+    const layers = {
+        walls: {visible: true, locked: false},
+        zones: {visible: true, locked: false},
+        distributors: {visible: true, locked: false},
+        pipes: {visible: true, locked: false},
+        guides: {visible: true, locked: false}
+    };
 
     let gridSize = 38; // grid spacing in pixels (0.5 m)
     let pipeGrid = gridSize / 4; // finer grid for manual pipes
@@ -124,6 +133,10 @@ window.addEventListener('load', () => {
     }
 
     function setMode(m) {
+        if (m === 'wall' && layers.walls.locked) return;
+        if (m === 'zone' && layers.zones.locked) return;
+        if (m === 'distributor' && layers.distributors.locked) return;
+        if (m === 'pipe' && layers.pipes.locked) return;
         mode = m;
         Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
         if (toolButtons[m]) toolButtons[m].classList.add('active');
@@ -204,6 +217,17 @@ window.addEventListener('load', () => {
                 drawAll();
             });
             distributorList.appendChild(li);
+        });
+    }
+
+    function updateLayerPanel() {
+        Array.from(layerPanel.querySelectorAll('.layer-item')).forEach(item => {
+            const name = item.dataset.layer;
+            const eye = item.querySelector('.eye');
+            const lock = item.querySelector('.lock');
+            const state = layers[name];
+            if (eye) eye.textContent = state.visible ? '👁' : '🙈';
+            if (lock) lock.textContent = state.locked ? '🔒' : '🔓';
         });
     }
 
@@ -518,20 +542,22 @@ window.addEventListener('load', () => {
         }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         lengthBox.style.display = 'none';
-        drawGrid();
+        if (layers.guides.visible) drawGrid();
         ctx.save();
         ctx.translate(offsetX, offsetY);
         ctx.scale(scale, scale);
         if (!currentFloor) { ctx.restore(); return; }
         ctx.strokeStyle = '#000';
         // walls
-        currentFloor.walls.forEach(w => {
-            drawWall(w, w === selectedWall);
-        });
-        drawWallJoints();
+        if (layers.walls.visible) {
+            currentFloor.walls.forEach(w => {
+                drawWall(w, w === selectedWall);
+            });
+            drawWallJoints();
+        }
         ctx.strokeStyle = '#000';
         // zones
-        currentFloor.zones.forEach(z => {
+        if (layers.zones.visible) currentFloor.zones.forEach(z => {
             ctx.beginPath();
             ctx.moveTo(z.points[0].x, z.points[0].y);
             for (let i = 1; i < z.points.length; i++) {
@@ -548,7 +574,7 @@ window.addEventListener('load', () => {
                 ctx.fillText(z.name, b.x + 4, b.y + 12);
             }
         });
-        if (zoneDrawing && mode === 'zone') {
+        if (layers.zones.visible && zoneDrawing && mode === 'zone') {
             ctx.beginPath();
             ctx.moveTo(zoneDrawing[0].x, zoneDrawing[0].y);
             for (let i = 1; i < zoneDrawing.length; i++) {
@@ -559,7 +585,7 @@ window.addEventListener('load', () => {
             ctx.strokeStyle = 'red';
             ctx.stroke();
         }
-        if (pipeDrawing && mode === 'pipe') {
+        if (layers.pipes.visible && pipeDrawing && mode === 'pipe') {
             const snap = snapToPipePoints(mouseWorld.x, mouseWorld.y);
             const pts = pipeDrawing.points.concat([{x:snap.x, y:snap.y}]);
             drawPipePath(pts, 'red', 0);
@@ -615,6 +641,7 @@ window.addEventListener('load', () => {
             lengthInfo = { start, end: snap };
         }
         // distributors
+        if (layers.distributors.visible) {
         ctx.fillStyle = 'rgba(0,0,255,0.3)';
         currentFloor.distributors.forEach(d => {
             const corners = distributorCorners(d);
@@ -632,9 +659,10 @@ window.addEventListener('load', () => {
                 ctx.fillText(d.name, pos.x + 2, pos.y + 12);
             }
         });
+        }
 
         // manual pipe paths not yet generated
-        currentFloor.zones.forEach(z => {
+        if (layers.pipes.visible) currentFloor.zones.forEach(z => {
             if (z.manualPath && !currentFloor.pipes.some(p => p.zone === z)) {
                 drawPipePath(z.manualPath, 'red', 0);
                 drawPipePath(z.manualPath.slice().reverse(), 'blue', PARALLEL_OFFSET);
@@ -642,7 +670,7 @@ window.addEventListener('load', () => {
         });
 
         // pipes
-        currentFloor.pipes.forEach(p => {
+        if (layers.pipes.visible) currentFloor.pipes.forEach(p => {
             const base = PARALLEL_OFFSET * 2 * (p.parallelIndex || 0);
             drawPipePath(p.supplyPath, p === selectedPipe ? 'orange' : 'red', base, p.crossings || []);
             const retCross = (p.crossings || []).map(i => p.returnPath.length - 2 - i);
@@ -1062,6 +1090,7 @@ window.addEventListener('load', () => {
     }
 
     function hitTestWall(x, y) {
+        if (!layers.walls.visible) return {wall: null};
         for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
             const w = currentFloor.walls[i];
             if (Math.hypot(w.x1 - x, w.y1 - y) < SNAP_DIST) {
@@ -1765,6 +1794,7 @@ window.addEventListener('load', () => {
     }
 
     function hitTestZone(x, y) {
+        if (!layers.zones.visible) return null;
         for (let i = currentFloor.zones.length - 1; i >= 0; i--) {
             const r = currentFloor.zones[i];
             if (pointInPolygon(x, y, r.points)) {
@@ -1787,6 +1817,7 @@ window.addEventListener('load', () => {
     }
 
     function hitTestDistributor(x, y) {
+        if (!layers.distributors.visible) return null;
         for (let i = currentFloor.distributors.length - 1; i >= 0; i--) {
             const d = currentFloor.distributors[i];
             const pts = distributorCorners(d);
@@ -1798,6 +1829,7 @@ window.addEventListener('load', () => {
     }
 
     function hitTestDoor(x, y) {
+        if (!layers.walls.visible) return null;
         for (let wi = currentFloor.walls.length - 1; wi >= 0; wi--) {
             const w = currentFloor.walls[wi];
             const len = wallLength(w);
@@ -1817,6 +1849,7 @@ window.addEventListener('load', () => {
     }
 
     function hitTestPipe(x, y) {
+        if (!layers.pipes.visible) return null;
         for (let i = currentFloor.pipes.length - 1; i >= 0; i--) {
             const p = currentFloor.pipes[i];
             const paths = [p.supplyPath, p.returnPath];
@@ -1846,6 +1879,7 @@ window.addEventListener('load', () => {
         startX = world.x;
         startY = world.y;
         if (mode === 'wall') {
+            if (layers.walls.locked) return;
             const snap = snapToPoints(startX, startY);
             if (!wallStart) {
                 wallStart = snap;
@@ -1868,6 +1902,7 @@ window.addEventListener('load', () => {
             drawAll();
             return;
         } else if (mode === 'zone') {
+            if (layers.zones.locked) return;
             const snap = snapToPoints(startX, startY);
             if (!zoneDrawing) {
                 zoneDrawing = [snap];
@@ -1892,6 +1927,7 @@ window.addEventListener('load', () => {
             drawAll();
             return;
         } else if (mode === 'pipe') {
+            if (layers.pipes.locked) return;
             const snap = snapToPipePoints(startX, startY);
             if (!pipeDrawing) {
                 const dist = hitTestDistributor(startX, startY);
@@ -1921,6 +1957,7 @@ window.addEventListener('load', () => {
             drawAll();
             return;
         } else if (mode === 'distributor') {
+            if (layers.distributors.locked) return;
             const width = parseFloat(prompt('Width (m)?', '0.3')) || 0.3;
             const height = parseFloat(prompt('Depth (m)?', '0.1')) || 0.1;
             const pxWidth = width * pixelsPerMeter;
@@ -1955,7 +1992,7 @@ window.addEventListener('load', () => {
         } else if (mode === 'select') {
             const d = hitTestDistributor(startX, startY);
             const hit = hitTestWall(startX, startY);
-            if (d) {
+            if (d && !layers.distributors.locked) {
                 selectedDistributor = d;
                 selectedZone = null;
                 selectedWall = null;
@@ -1965,7 +2002,7 @@ window.addEventListener('load', () => {
                 drawing = true;
                 updateDistributorList();
                 drawAll();
-            } else if (hit.wall) {
+            } else if (hit.wall && !layers.walls.locked) {
                 selectedWall = hit.wall;
                 selectedZone = null;
                 selectedDistributor = null;
@@ -1983,10 +2020,10 @@ window.addEventListener('load', () => {
                 lengthInput.disabled = true;
                 wallThicknessInput.value = '';
                 wallThicknessInput.disabled = true;
-                const r = hitTestZone(startX, startY);
-                const d2 = hitTestDistributor(startX, startY);
-                const doorHit = hitTestDoor(startX, startY);
-                const p = hitTestPipe(startX, startY);
+                const r = layers.zones.locked ? null : hitTestZone(startX, startY);
+                const d2 = layers.distributors.locked ? null : hitTestDistributor(startX, startY);
+                const doorHit = layers.walls.locked ? null : hitTestDoor(startX, startY);
+                const p = layers.pipes.locked ? null : hitTestPipe(startX, startY);
                 if (doorHit) {
                     selectedWall = doorHit.wall;
                     selectedDoor = doorHit.door;
@@ -2160,6 +2197,24 @@ window.addEventListener('load', () => {
     importFile.addEventListener('change', handleImport);
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
+    layerPanel.addEventListener('click', e => {
+        const item = e.target.closest('.layer-item');
+        if (!item) return;
+        const name = item.dataset.layer;
+        const state = layers[name];
+        if (e.target.classList.contains('eye')) {
+            if (e.altKey) {
+                Object.keys(layers).forEach(k => layers[k].visible = k === name);
+            } else {
+                state.visible = !state.visible;
+            }
+        } else if (e.target.classList.contains('lock')) {
+            state.locked = !state.locked;
+        }
+        updateLayerPanel();
+        drawAll();
+    });
+
     canvas.addEventListener('dblclick', e => {
         if (!currentFloor) return;
         const rect = canvas.getBoundingClientRect();
@@ -2207,5 +2262,6 @@ window.addEventListener('load', () => {
     addFloor('Floor 1');
     setMode('select');
     resizeCanvas();
+    updateLayerPanel();
     pushHistoryNow();
 });
