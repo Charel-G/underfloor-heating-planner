@@ -23,6 +23,8 @@ window.addEventListener('load', () => {
     const generatePipesBtn = document.getElementById('generatePipesBtn');
     const manualPipeBtn = document.getElementById('manualPipeBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importFile = document.getElementById('importFile');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
     const spacingInput = document.getElementById('pipeSpacing');
     const lengthInput = document.getElementById('lineLength');
@@ -741,16 +743,132 @@ window.addEventListener('load', () => {
         drawAll();
     }
 
+    function toMeters(v) { return v / pixelsPerMeter; }
+    function fromMeters(v) { return v * pixelsPerMeter; }
+
+    function serializeProject() {
+        return {
+            floors: floors.map(f => ({
+                name: f.name,
+                walls: f.walls.map(w => ({
+                    x1: toMeters(w.x1),
+                    y1: toMeters(w.y1),
+                    x2: toMeters(w.x2),
+                    y2: toMeters(w.y2),
+                    thickness: toMeters(w.thickness || defaultWallThickness),
+                    doors: (w.doors||[]).map(d => ({ offset: toMeters(d.offset), width: toMeters(d.width) }))
+                })),
+                zones: f.zones.map(z => ({
+                    name: z.name,
+                    spacing: toMeters(z.spacing),
+                    distributorId: z.distributorId,
+                    points: z.points.map(p => ({x: toMeters(p.x), y: toMeters(p.y)})),
+                    manualPath: z.manualPath ? z.manualPath.map(p=>({x:toMeters(p.x),y:toMeters(p.y)})) : null
+                })),
+                distributors: f.distributors.map(d => ({
+                    name: d.name,
+                    width: toMeters(d.width),
+                    height: toMeters(d.height),
+                    connections: d.connections,
+                    wallId: d.wallId,
+                    offset: d.offset != null ? toMeters(d.offset) : null,
+                    sign: d.sign,
+                    x: d.x != null ? toMeters(d.x) : null,
+                    y: d.y != null ? toMeters(d.y) : null,
+                    nextPort: d.nextPort || 0
+                })),
+                pipes: f.pipes.map(p => ({
+                    zoneIndex: f.zones.indexOf(p.zone),
+                    distributorIndex: f.distributors.indexOf(p.distributor),
+                    parallelIndex: p.parallelIndex || 0,
+                    supplyPath: p.supplyPath.map(pt=>({x:toMeters(pt.x),y:toMeters(pt.y)})),
+                    returnPath: p.returnPath.map(pt=>({x:toMeters(pt.x),y:toMeters(pt.y)}))
+                }))
+            }))
+        };
+    }
+
+    function deserializeProject(data) {
+        floors = (data.floors||[]).map(f => {
+            const floor = {name: f.name, walls: [], zones: [], distributors: [], pipes: []};
+            floor.walls = (f.walls||[]).map(w => ({
+                x1: fromMeters(w.x1),
+                y1: fromMeters(w.y1),
+                x2: fromMeters(w.x2),
+                y2: fromMeters(w.y2),
+                thickness: fromMeters(w.thickness),
+                doors: (w.doors||[]).map(d=>({offset:fromMeters(d.offset), width:fromMeters(d.width)}))
+            }));
+            floor.zones = (f.zones||[]).map(z => ({
+                name: z.name,
+                spacing: fromMeters(z.spacing),
+                distributorId: z.distributorId,
+                points: (z.points||[]).map(p=>({x:fromMeters(p.x), y:fromMeters(p.y)})),
+                manualPath: z.manualPath ? z.manualPath.map(p=>({x:fromMeters(p.x), y:fromMeters(p.y)})) : null
+            }));
+            floor.distributors = (f.distributors||[]).map(d => ({
+                name: d.name,
+                width: fromMeters(d.width),
+                height: fromMeters(d.height),
+                connections: d.connections,
+                wallId: d.wallId,
+                offset: d.offset != null ? fromMeters(d.offset) : null,
+                sign: d.sign,
+                x: d.x != null ? fromMeters(d.x) : null,
+                y: d.y != null ? fromMeters(d.y) : null,
+                nextPort: d.nextPort || 0
+            }));
+            floor.pipes = (f.pipes||[]).map(p => ({
+                zoneIndex: p.zoneIndex,
+                distributorIndex: p.distributorIndex,
+                parallelIndex: p.parallelIndex || 0,
+                supplyPath: p.supplyPath.map(pt=>({x:fromMeters(pt.x),y:fromMeters(pt.y)})),
+                returnPath: p.returnPath.map(pt=>({x:fromMeters(pt.x),y:fromMeters(pt.y)}))
+            }));
+            return floor;
+        });
+        floors.forEach(fl => {
+            fl.pipes.forEach(p => {
+                p.zone = fl.zones[p.zoneIndex];
+                p.distributor = fl.distributors[p.distributorIndex];
+                p.length = pathLength(p.supplyPath) + pathLength(p.returnPath);
+            });
+        });
+        currentFloor = floors[0] || null;
+        updateFloorList();
+        updateDistributorList();
+        connectWalls();
+        drawAll();
+    }
+
+    function handleImport(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const data = JSON.parse(reader.result);
+                deserializeProject(data);
+            } catch (err) {
+                alert('Invalid project file');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
     function exportPlan() {
         if (!currentFloor) return;
         drawAll();
         const png = canvas.toDataURL('image/png');
-        const data = currentFloor.pipes.map(p => ({
+        const project = serializeProject();
+        const pipeData = currentFloor.pipes.map(p => ({
             zone: p.zone.name || '',
             distributor: p.distributor.name || '',
             length_m: p.length.toFixed(2)
         }));
-        const json = JSON.stringify({ pipes: data }, null, 2);
+        project.pipe_lengths = pipeData;
+        const json = JSON.stringify(project, null, 2);
         const imgLink = document.createElement('a');
         imgLink.href = png;
         imgLink.download = 'floorplan.png';
@@ -1934,6 +2052,8 @@ window.addEventListener('load', () => {
     generatePipesBtn.addEventListener('click', generatePipes);
     manualPipeBtn.addEventListener('click', () => setMode('pipe'));
     exportBtn.addEventListener('click', exportPlan);
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', handleImport);
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
     canvas.addEventListener('dblclick', e => {

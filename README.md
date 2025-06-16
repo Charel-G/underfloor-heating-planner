@@ -57,7 +57,8 @@ back to the distributor and are drawn with separate offsets for clarity.
 - Toolbar buttons highlight when active and a **Center** button recenters the canvas
 - Keyboard shortcuts provide quick tool access (W wall, D door, X distributor, Z zone, S select, C center, P pan, R generate pipes, M manual pipe)
 - Generated pipes remain selectable objects and can be deleted
-- **Export** downloads an image and pipe length data per zone
+- **Export** downloads an image and a JSON project file
+- **Import** loads a previously exported project
 - If no valid path can be found between a distributor and a zone without
   crossing walls, an alert is shown explaining why routing failed
 
@@ -70,7 +71,7 @@ While drawing a wall you can type a length and press **Enter** to size the segme
 
 Walls are drawn with a default thickness of 0.25 m. When a wall is selected, the **Wall Thickness** input allows you to change this value. The **Add Door** tool places a doorway onto a wall; doors snap to the wall’s centre line and can be repositioned with the select tool or resized by double‑clicking them. The **Add Distributor** tool behaves similarly but positions the manifold flush with the side of the wall closest to the click. Each distributor automatically sizes itself to fit all configured connections, and the ports for manual pipes are arranged along one side so new pipe pairs snap neatly to the grid. Use **Manual Pipe** to trace a connection from a distributor to a zone. These paths stay until you click **Generate Pipes**, which creates the serpentine loop starting from the entry point.
 
-The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. The drawing area covers over a kilometre in each direction so you can pan freely when laying out large buildings. **The grid pattern now extends indefinitely,** so it never disappears as you pan across the workspace. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas. **Center** snaps the view back to the origin. Click **Generate Pipes** to automatically route supply and return pipes and fill each zone or select **Manual Pipe** to place your own connection paths. Use **Fix Wall Joints** if corners don't connect correctly. **Clear** asks for confirmation before removing all items from the current floor. Generated pipes remain selectable so you can delete them individually. Segments drawn dashed in purple indicate a pipe that had to cross another zone. Use **Export** to download a PNG and a JSON file listing pipe lengths by zone.
+The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. The drawing area covers over a kilometre in each direction so you can pan freely when laying out large buildings. **The grid pattern now extends indefinitely,** so it never disappears as you pan across the workspace. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas. **Center** snaps the view back to the origin. Click **Generate Pipes** to automatically route supply and return pipes and fill each zone or select **Manual Pipe** to place your own connection paths. Use **Fix Wall Joints** if corners don't connect correctly. **Clear** asks for confirmation before removing all items from the current floor. Generated pipes remain selectable so you can delete them individually. Segments drawn dashed in purple indicate a pipe that had to cross another zone. Use **Export** to download a PNG and JSON project file. Use **Import** to load a saved project.
 
 The interface uses a darker header with lighter panels below it. The floor list and toolbar have subtle backgrounds so the layout looks more modern and readable.
 
