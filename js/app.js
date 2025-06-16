@@ -21,6 +21,7 @@ window.addEventListener('load', () => {
     const centerBtn = document.getElementById('centerBtn');
     const clearBtn = document.getElementById('clearBtn');
     const drawPipesBtn = document.getElementById('drawPipesBtn');
+    const manualPipeBtn = document.getElementById('manualPipeBtn');
     const exportBtn = document.getElementById('exportBtn');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
     const spacingInput = document.getElementById('pipeSpacing');
@@ -36,10 +37,12 @@ window.addEventListener('load', () => {
         distributor: addDistributorBtn,
         door: addDoorBtn,
         select: selectBtn,
-        pan: panBtn
+        pan: panBtn,
+        pipe: manualPipeBtn
     });
 
     const gridSize = 38; // grid spacing in pixels (0.5 m)
+    const pipeGrid = gridSize / 4; // finer grid for manual pipes
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
@@ -60,6 +63,7 @@ window.addEventListener('load', () => {
     let selectedDoor = null;
     let dragMode = null; // move, end1, end2, moveZone/distributor/moveDoor
     let zoneDrawing = null; // array of points while creating a zone
+    let pipeDrawing = null; // current manual pipe path
     let typedLength = '';
 
     function setMode(m) {
@@ -344,6 +348,9 @@ window.addEventListener('load', () => {
             } else if (mode === 'zone') {
                 zoneDrawing = null;
                 drawAll();
+            } else if (mode === 'pipe') {
+                pipeDrawing = null;
+                drawAll();
             }
             e.preventDefault();
             return;
@@ -358,6 +365,7 @@ window.addEventListener('load', () => {
             case 's': setMode('select'); break;
             case 'c': offsetX = 0; offsetY = 0; drawAll(); break;
             case 'p': setMode('pan'); break;
+            case 'm': setMode('pipe'); break;
             case 'r': generatePipes(); break;
             default: return; // ignore others
         }
@@ -473,10 +481,18 @@ window.addEventListener('load', () => {
             ctx.strokeStyle = 'red';
             ctx.stroke();
         }
+        if (pipeDrawing && mode === 'pipe') {
+            const snap = snapToPipePoints(mouseWorld.x, mouseWorld.y);
+            const pts = pipeDrawing.points.concat([{x:snap.x, y:snap.y}]);
+            drawPipePath(pts, 'red', 0);
+            drawPipePath(pts.slice().reverse(), 'blue', PARALLEL_OFFSET);
+        }
 
         let previewSnap = null;
         if (mode === 'wall') {
             previewSnap = snapToPoints(mouseWorld.x, mouseWorld.y);
+        } else if (mode === 'pipe') {
+            previewSnap = snapToPipePoints(mouseWorld.x, mouseWorld.y);
         }
 
         let lengthInfo = null;
@@ -504,11 +520,20 @@ window.addEventListener('load', () => {
             ctx.beginPath();
             ctx.arc(previewSnap.x, previewSnap.y, 5, 0, Math.PI * 2);
             ctx.stroke();
+        } else if (mode === 'pipe' && previewSnap && previewSnap.snapped) {
+            ctx.strokeStyle = 'orange';
+            ctx.beginPath();
+            ctx.arc(previewSnap.x, previewSnap.y, 4, 0, Math.PI * 2);
+            ctx.stroke();
         }
 
         if (zoneDrawing && mode === 'zone') {
             const start = zoneDrawing[zoneDrawing.length - 1];
             const snap = snapToPoints(mouseWorld.x, mouseWorld.y);
+            lengthInfo = { start, end: snap };
+        } else if (pipeDrawing && mode === 'pipe') {
+            const start = pipeDrawing.points[pipeDrawing.points.length-1];
+            const snap = snapToPipePoints(mouseWorld.x, mouseWorld.y);
             lengthInfo = { start, end: snap };
         }
         // distributors
@@ -652,24 +677,29 @@ window.addEventListener('load', () => {
                 const defSpacing = (parseInt(spacingInput.value, 10) || 0) / 1000 * pixelsPerMeter;
                 const spacing = zone.spacing || defSpacing || gridSize;
                 const distPos = distributorPort(dist);
-                const entry = entryPointForZone(zone, distPos);
+                let toEntry, entry;
+                if (zone.manualPath) {
+                    toEntry = zone.manualPath.slice();
+                    entry = toEntry[toEntry.length - 1];
+                } else {
+                    entry = entryPointForZone(zone, distPos);
+                    toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: true, excludeZone: zone});
+                    if (!toEntry) {
+                        toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: false});
+                    }
+                    if (!toEntry) {
+                        alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                        return;
+                    }
+                    toEntry = expandDiagonals(toEntry, {avoidZones: true, excludeZone: zone});
 
-                let toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: true, excludeZone: zone});
-                if (!toEntry) {
-                    toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: false});
+                    if (!pathValid(toEntry, {avoidZones:false})) {
+                        alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
+                        return;
+                    }
                 }
-                if (!toEntry) {
-                    alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
-                    return;
-                }
-                toEntry = expandDiagonals(toEntry, {avoidZones: true, excludeZone: zone});
 
                 const crossings = zoneCrossingIndices(toEntry, zone);
-
-                if (!pathValid(toEntry, {avoidZones:false})) {
-                    alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
-                    return;
-                }
 
                 const zonePath = zoneLoopPath(zone, spacing, entry);
                 const supplyPath = toEntry.concat(zonePath);
@@ -791,6 +821,35 @@ window.addEventListener('load', () => {
         });
 
         return { x: sx, y: sy, snapped: best < Infinity };
+    }
+
+    // snapping for manual pipe drawing
+    function snapToPipePoints(x, y) {
+        let sx = x, sy = y;
+        let best = Infinity;
+
+        function consider(px, py) {
+            const d = Math.hypot(px - x, py - y);
+            if (d < SNAP_DIST && d < best) {
+                sx = px; sy = py; best = d;
+            }
+        }
+
+        const gx = Math.round(x / pipeGrid) * pipeGrid;
+        const gy = Math.round(y / pipeGrid) * pipeGrid;
+        consider(gx, gy);
+
+        currentFloor.distributors.forEach(d => {
+            const p = distributorPort(d);
+            consider(p.x, p.y);
+        });
+
+        currentFloor.zones.forEach(z => {
+            const p = closestPointOnZone(z, x, y);
+            consider(p.x, p.y);
+        });
+
+        return {x: sx, y: sy, snapped: best < Infinity};
     }
 
     function wallLength(w) {
@@ -1603,10 +1662,34 @@ window.addEventListener('load', () => {
                     if (!isNaN(idx) && currentFloor.distributors[idx]) distributorId = idx;
                 }
                 const points = zoneDrawing.slice();
-                currentFloor.zones.push({ points, name, spacing, distributorId });
+                currentFloor.zones.push({ points, name, spacing, distributorId, manualPath: null });
                 zoneDrawing = null;
             } else {
                 zoneDrawing.push(snap);
+            }
+            drawAll();
+            return;
+        } else if (mode === 'pipe') {
+            const snap = snapToPipePoints(startX, startY);
+            if (!pipeDrawing) {
+                const dist = hitTestDistributor(startX, startY);
+                if (!dist) return;
+                const id = currentFloor.distributors.indexOf(dist);
+                pipeDrawing = { distributorId: id, points: [distributorPort(dist)] };
+            } else {
+                const prev = pipeDrawing.points[pipeDrawing.points.length-1];
+                const ang = snapAngle(snap.x - prev.x, snap.y - prev.y);
+                const end = snapToPipePoints(prev.x + ang.dx, prev.y + ang.dy);
+                pipeDrawing.points.push({x:end.x, y:end.y});
+                const zone = hitTestZone(end.x, end.y);
+                if (zone) {
+                    pipeDrawing.points[pipeDrawing.points.length-1] = closestPointOnZone(zone, end.x, end.y);
+                    zone.manualPath = pipeDrawing.points.slice();
+                    zone.distributorId = pipeDrawing.distributorId;
+                    pipeDrawing = null;
+                    generatePipes();
+                    return;
+                }
             }
             drawAll();
             return;
@@ -1822,6 +1905,7 @@ window.addEventListener('load', () => {
     });
 
     drawPipesBtn.addEventListener('click', generatePipes);
+    manualPipeBtn.addEventListener('click', () => setMode('pipe'));
     exportBtn.addEventListener('click', exportPlan);
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
