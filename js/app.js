@@ -43,12 +43,13 @@ window.addEventListener('load', () => {
         pipe: manualPipeBtn
     });
 
-    const gridSize = 38; // grid spacing in pixels (0.5 m)
-    const pipeGrid = gridSize / 4; // finer grid for manual pipes
+    let gridSize = 38; // grid spacing in pixels (0.5 m)
+    let pipeGrid = gridSize / 4; // finer grid for manual pipes
     const SNAP_DIST = 10;
     const PARALLEL_OFFSET = 6;
     const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
+    let scale = 1;
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
     let offsetX = 0;
@@ -421,13 +422,14 @@ window.addEventListener('load', () => {
     function drawGrid() {
         ctx.save();
         ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
         ctx.strokeStyle = '#ccc';
         ctx.beginPath();
 
-        const left = -offsetX;
-        const right = canvas.width - offsetX;
-        const top = -offsetY;
-        const bottom = canvas.height - offsetY;
+        const left = -offsetX / scale;
+        const right = (canvas.width - offsetX) / scale;
+        const top = -offsetY / scale;
+        const bottom = (canvas.height - offsetY) / scale;
 
         const startX = Math.floor(left / gridSize) * gridSize;
         for (let x = startX; x <= right; x += gridSize) {
@@ -451,6 +453,7 @@ window.addEventListener('load', () => {
         drawGrid();
         ctx.save();
         ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
         if (!currentFloor) { ctx.restore(); return; }
         ctx.strokeStyle = '#000';
         // walls
@@ -583,8 +586,8 @@ window.addEventListener('load', () => {
             const len = Math.hypot(lengthInfo.end.x - lengthInfo.start.x,
                                    lengthInfo.end.y - lengthInfo.start.y) / pixelsPerMeter;
             const rect = canvas.getBoundingClientRect();
-            const sx = rect.left + window.scrollX + lengthInfo.end.x + offsetX;
-            const sy = rect.top + window.scrollY + lengthInfo.end.y + offsetY;
+            const sx = rect.left + window.scrollX + lengthInfo.end.x * scale + offsetX;
+            const sy = rect.top + window.scrollY + lengthInfo.end.y * scale + offsetY;
             const txt = typedLength ? typedLength + ' m' : len.toFixed(2) + ' m';
             lengthBox.textContent = txt;
             lengthBox.style.left = sx + 'px';
@@ -1675,7 +1678,7 @@ window.addEventListener('load', () => {
 
 
     function screenToWorld(x, y) {
-        return { x: x - offsetX, y: y - offsetY };
+        return { x: (x - offsetX) / scale, y: (y - offsetY) / scale };
     }
 
     function hitTestZone(x, y) {
@@ -2045,6 +2048,19 @@ window.addEventListener('load', () => {
         connectWalls();
         drawAll();
     });
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const world = screenToWorld(sx, sy);
+        const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+        scale = Math.min(5, Math.max(0.2, scale * zoom));
+        offsetX = sx - world.x * scale;
+        offsetY = sy - world.y * scale;
+        drawAll();
+    }, { passive: false });
 
     generatePipesBtn.addEventListener('click', generatePipes);
     manualPipeBtn.addEventListener('click', () => setMode('pipe'));
