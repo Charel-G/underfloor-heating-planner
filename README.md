@@ -58,6 +58,7 @@ back to the distributor and are drawn with separate offsets for clarity.
 - Use the mouse wheel to zoom in and out of the canvas
 - Keyboard shortcuts provide quick tool access (W wall, D door, X distributor, Z zone, S select, C center, P pan, R generate pipes, M draw pipes)
 - Generated pipes remain selectable objects and can be deleted
+- Modern Windows 11–inspired color theme
 - **Export** downloads an image and a JSON project file
 - **Import** loads a previously exported project
 - If no valid path can be found between a distributor and a zone without
@@ -74,7 +75,7 @@ Walls are drawn with a default thickness of 0.25 m. When a wall is selected, t
 
 The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. The drawing area covers over a kilometre in each direction so you can pan freely when laying out large buildings. **The grid pattern now extends indefinitely,** so it never disappears as you pan across the workspace. Pipe spacing is entered in millimetres. Use the **Pan** tool to move the entire floor plan inside the canvas and scroll the mouse wheel to zoom in or out. **Center** snaps the view back to the origin. Click **Generate Pipes** to automatically route supply and return pipes and fill each zone or select **Draw Pipes** to place your own connection paths. Use **Fix Wall Joints** if corners don't connect correctly. **Clear** asks for confirmation before removing all items from the current floor. Generated pipes remain selectable so you can delete them individually. Segments drawn dashed in purple indicate a pipe that had to cross another zone. Use **Export** to download a PNG and JSON project file. Use **Import** to load a saved project.
 
-The interface uses a darker header with lighter panels below it. The floor list and toolbar have subtle backgrounds so the layout looks more modern and readable.
+The interface features a colorful Windows 11–style theme. A gradient header and light panels give the planner a modern appearance while keeping controls readable.
 
 You can simply open `index.html` in your browser or run a small local server
 with Python:
