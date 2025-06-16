@@ -20,6 +20,8 @@ window.addEventListener('load', () => {
     const panBtn = document.getElementById('panBtn');
     const centerBtn = document.getElementById('centerBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
     const generatePipesBtn = document.getElementById('generatePipesBtn');
     const manualPipeBtn = document.getElementById('manualPipeBtn');
     const exportBtn = document.getElementById('exportBtn');
@@ -72,6 +74,54 @@ window.addEventListener('load', () => {
     let pipeDrawing = null; // current manual pipe path
     let typedLength = '';
 
+    // history for undo/redo
+    let history = [];
+    let historyIndex = -1;
+    let historyPending = false;
+
+    function scheduleHistory() {
+        historyPending = true;
+    }
+
+    function pushHistoryNow() {
+        const currentIndex = floors.indexOf(currentFloor);
+        const snapshot = JSON.stringify({ floors, currentIndex });
+        if (historyIndex < history.length - 1) {
+            history = history.slice(0, historyIndex + 1);
+        }
+        history.push(snapshot);
+        if (history.length > 200) {
+            history.shift();
+        } else {
+            historyIndex++;
+        }
+        historyPending = false;
+    }
+
+    function loadHistory(index) {
+        if (index < 0 || index >= history.length) return;
+        const data = JSON.parse(history[index]);
+        floors = data.floors;
+        currentFloor = floors[data.currentIndex] || floors[0] || null;
+        updateFloorList();
+        updateDistributorList();
+        drawAll();
+    }
+
+    function undo() {
+        if (historyIndex > 0) {
+            historyIndex--;
+            loadHistory(historyIndex);
+        }
+    }
+
+    function redo() {
+        if (historyIndex < history.length - 1) {
+            historyIndex++;
+            loadHistory(historyIndex);
+        }
+    }
+
     function setMode(m) {
         mode = m;
         Object.values(toolButtons).forEach(btn => btn.classList.remove('active'));
@@ -123,6 +173,7 @@ window.addEventListener('load', () => {
                 if (n) {
                     f.name = n;
                     updateFloorList();
+                    scheduleHistory();
                 }
             });
             floorList.appendChild(li);
@@ -148,6 +199,7 @@ window.addEventListener('load', () => {
             li.addEventListener('dblclick', () => {
                 d.name = prompt('Name?', d.name || '') || d.name;
                 updateDistributorList();
+                scheduleHistory();
                 drawAll();
             });
             distributorList.appendChild(li);
@@ -158,6 +210,7 @@ window.addEventListener('load', () => {
         const name = prompt('Floor name?', `Floor ${floors.length + 1}`);
         if (name) {
             addFloor(name);
+            scheduleHistory();
             drawAll();
         }
     });
@@ -168,6 +221,7 @@ window.addEventListener('load', () => {
         if (name) {
             currentFloor.name = name;
             updateFloorList();
+            scheduleHistory();
         }
     });
 
@@ -184,6 +238,7 @@ window.addEventListener('load', () => {
             }
             updateFloorList();
             updateDistributorList();
+            scheduleHistory();
             drawAll();
         }
     });
@@ -224,6 +279,7 @@ window.addEventListener('load', () => {
             const minW = (selectedDistributor.connections + 1) * PORT_SPACING;
             if (selectedDistributor.width < minW) selectedDistributor.width = minW;
             selectedDistributor.name = name;
+            scheduleHistory();
             drawAll();
         }
     });
@@ -287,6 +343,7 @@ window.addEventListener('load', () => {
             if (i >= 0) currentFloor.pipes.splice(i, 1);
             selectedPipe = null;
         }
+        scheduleHistory();
         drawAll();
     }
 
@@ -299,6 +356,9 @@ window.addEventListener('load', () => {
     document.addEventListener('keydown', e => {
         const activeTag = document.activeElement.tagName;
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+        if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')) { undo(); e.preventDefault(); return; }
+        if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { redo(); e.preventDefault(); return; }
 
         // numeric length entry while drawing walls
         if (mode === 'wall' && wallStart) {
@@ -336,6 +396,7 @@ window.addEventListener('load', () => {
                     wallStart = end;
                     typedLength = '';
                     connectWalls();
+                    scheduleHistory();
                     drawAll();
                 }
                 e.preventDefault();
@@ -392,6 +453,7 @@ window.addEventListener('load', () => {
         selectedDistributor = null;
         selectedPipe = null;
         updateDistributorList();
+        scheduleHistory();
         drawAll();
     });
 
@@ -408,6 +470,7 @@ window.addEventListener('load', () => {
         selectedWall.x2 = selectedWall.x1 + dx * factor;
         selectedWall.y2 = selectedWall.y1 + dy * factor;
         connectWalls();
+        scheduleHistory();
         drawAll();
     });
 
@@ -416,6 +479,7 @@ window.addEventListener('load', () => {
         const th = parseFloat(wallThicknessInput.value);
         if (isNaN(th)) return;
         selectedWall.thickness = th * pixelsPerMeter;
+        scheduleHistory();
         drawAll();
     });
 
@@ -448,6 +512,9 @@ window.addEventListener('load', () => {
     }
 
     function drawAll() {
+        if (historyPending) {
+            pushHistoryNow();
+        }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         lengthBox.style.display = 'none';
         drawGrid();
@@ -745,6 +812,7 @@ window.addEventListener('load', () => {
                 }
             });
         });
+        scheduleHistory();
         drawAll();
     }
 
@@ -843,6 +911,7 @@ window.addEventListener('load', () => {
         updateFloorList();
         updateDistributorList();
         connectWalls();
+        scheduleHistory();
         drawAll();
     }
 
@@ -1780,6 +1849,7 @@ window.addEventListener('load', () => {
                 wallStart = end;
                 typedLength = '';
                 connectWalls();
+                scheduleHistory();
             }
             drawAll();
             return;
@@ -1801,6 +1871,7 @@ window.addEventListener('load', () => {
                 const points = zoneDrawing.slice();
                 currentFloor.zones.push({ points, name, spacing, distributorId, manualPath: null });
                 zoneDrawing = null;
+                scheduleHistory();
             } else {
                 zoneDrawing.push(snap);
             }
@@ -1828,6 +1899,7 @@ window.addEventListener('load', () => {
                     const d = currentFloor.distributors[pipeDrawing.distributorId];
                     if (d) d.nextPort = (pipeDrawing.portIndex || 0) + 1;
                     pipeDrawing = null;
+                    scheduleHistory();
                     drawAll();
                     return;
                 }
@@ -1852,6 +1924,7 @@ window.addEventListener('load', () => {
             }
             currentFloor.distributors.push(distObj);
             updateDistributorList();
+            scheduleHistory();
             drawAll();
         } else if (mode === 'door') {
             const hit = hitTestWall(startX, startY);
@@ -1862,6 +1935,7 @@ window.addEventListener('load', () => {
                 const door = { offset: proj, width: 1 * pixelsPerMeter };
                 w.doors = w.doors || [];
                 w.doors.push(door);
+                scheduleHistory();
                 drawAll();
             }
         } else if (mode === 'select') {
@@ -2046,6 +2120,7 @@ window.addEventListener('load', () => {
         }
         dragMode = null;
         connectWalls();
+        scheduleHistory();
         drawAll();
     });
 
@@ -2064,6 +2139,8 @@ window.addEventListener('load', () => {
 
     generatePipesBtn.addEventListener('click', generatePipes);
     manualPipeBtn.addEventListener('click', () => setMode('pipe'));
+    undoBtn.addEventListener('click', undo);
+    redoBtn.addEventListener('click', redo);
     exportBtn.addEventListener('click', exportPlan);
     importBtn.addEventListener('click', () => importFile.click());
     importFile.addEventListener('change', handleImport);
@@ -2090,6 +2167,7 @@ window.addEventListener('load', () => {
                 const idx = parseInt(ans, 10);
                 if (!isNaN(idx) && currentFloor.distributors[idx]) r.distributorId = idx;
             }
+            scheduleHistory();
             drawAll();
         } else if (d) {
             d.name = prompt('Name?', d.name || '') || d.name;
@@ -2101,10 +2179,12 @@ window.addEventListener('load', () => {
             if (!isNaN(connections)) d.connections = connections;
             const minW = (d.connections + 1) * PORT_SPACING;
             if (d.width < minW) d.width = minW;
+            scheduleHistory();
             drawAll();
         } else if (doorHit) {
             const newWidth = parseFloat(prompt('Door width (m)?', (doorHit.door.width / pixelsPerMeter).toFixed(2)), 10);
             if (!isNaN(newWidth)) doorHit.door.width = newWidth * pixelsPerMeter;
+            scheduleHistory();
             drawAll();
         }
     });
@@ -2113,4 +2193,5 @@ window.addEventListener('load', () => {
     addFloor('Floor 1');
     setMode('select');
     resizeCanvas();
+    pushHistoryNow();
 });

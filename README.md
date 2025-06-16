@@ -58,6 +58,7 @@ back to the distributor and are drawn with separate offsets for clarity.
 - Use the mouse wheel to zoom in and out of the canvas
 - Keyboard shortcuts provide quick tool access (W wall, D door, X distributor, Z zone, S select, C center, P pan, R generate pipes, M draw pipes)
 - Generated pipes remain selectable objects and can be deleted
+- Undo and Redo history (buttons or **Ctrl+Z** / **Ctrl+Y**) with up to 200 steps
 - Modern Windows 11–inspired color theme
 - **Export** downloads an image and a JSON project file
 - **Import** loads a previously exported project
@@ -66,7 +67,7 @@ back to the distributor and are drawn with separate offsets for clarity.
 
 ## Usage
 
-Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors. The **Rename Floor** and **Delete Floor** buttons act on the currently selected floor (you can also rename by double‑clicking a floor name). Click a floor in the list to view it. Related drawing actions are grouped in the toolbar for quicker access and the active tool button is highlighted.
+Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors. The **Rename Floor** and **Delete Floor** buttons act on the currently selected floor (you can also rename by double‑clicking a floor name). Click a floor in the list to view it. Related drawing actions are grouped in the toolbar for quicker access and the active tool button is highlighted. Use **Undo** or **Redo** (Ctrl+Z/Ctrl+Y) to walk through recent changes.
 Below the floor list a distributor list shows all manifolds on the current floor. Selecting one highlights it in the plan and the **Delete Distributor** button removes it.
 The **Draw Wall** tool creates snapping lines. After placing a segment the next one begins from the previous endpoint, so you can chain walls together with successive clicks. Press **Esc** to finish and start elsewhere. Use **Draw Zone** in the same way; once you click near the starting point the polygon closes and you can enter its parameters. Use **Select/Move** to drag whole lines or their ends and edit their length in the **Line Length** input. Zones and distributors can also be moved with this tool. Double‑click a zone or distributor to change its properties or use the **Edit Distributor** button when a distributor is selected. Use **Delete Selected** (or press the Delete key) to remove the currently selected wall, zone or distributor.
 While drawing a wall you can type a length and press **Enter** to size the segment without using the input box. A tooltip near the cursor shows the current segment length in metres.
