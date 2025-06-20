@@ -39,6 +39,7 @@ window.addEventListener('load', () => {
     const lengthInput = document.getElementById('lineLength');
     const wallThicknessInput = document.getElementById('wallThickness');
     const lengthBox = document.getElementById('lengthBox');
+    const helpOverlay = document.getElementById('helpOverlay');
 
     const toolButtons = {};
 
@@ -239,6 +240,13 @@ window.addEventListener('load', () => {
         });
     }
 
+    function toggleHelp() {
+        helpOverlay.style.display =
+            helpOverlay.style.display === 'none' || !helpOverlay.style.display
+                ? 'flex'
+                : 'none';
+    }
+
     addFloorBtn.addEventListener('click', () => {
         const name = prompt('Floor name?', `Floor ${floors.length + 1}`);
         if (name) {
@@ -437,12 +445,22 @@ window.addEventListener('load', () => {
             }
         }
 
+        if (e.key === 'F1') {
+            toggleHelp();
+            e.preventDefault();
+            return;
+        }
         if (e.key === 'Delete') {
             deleteSelected();
             e.preventDefault();
             return;
         }
         if (e.key === 'Escape') {
+            if (helpOverlay.style.display !== 'none') {
+                helpOverlay.style.display = 'none';
+                e.preventDefault();
+                return;
+            }
             if (mode === 'wall') {
                 wallStart = null;
                 typedLength = '';
@@ -2268,6 +2286,7 @@ window.addEventListener('load', () => {
     closePlanDialog.addEventListener('click', () => { planDialog.style.display = 'none'; drawAll(); });
     planOpacity.addEventListener('input', () => { if (currentFloor && currentFloor.background) { currentFloor.background.opacity = parseFloat(planOpacity.value); drawAll(); } });
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
+    helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) toggleHelp(); });
 
     layerPanel.addEventListener('click', e => {
         const item = e.target.closest('.layer-item');

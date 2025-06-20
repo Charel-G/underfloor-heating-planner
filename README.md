@@ -60,6 +60,7 @@ waste time exploring far away from the floor plan.
 - A small layer panel lets you hide or lock Walls, Zones, Distributors, Pipes and Guides. Click the eye icon to toggle visibility or Alt-click to isolate a layer
 - Use the mouse wheel to zoom in and out of the canvas
 - Keyboard shortcuts provide quick tool access (W wall, D door, X distributor, Z zone, S select, C center, P pan, R generate pipes, M draw pipes)
+- Press **F1** to open a floating help overlay listing all shortcuts and gestures
 - Generated pipes remain selectable objects and can be deleted
 - Undo and Redo history (buttons or **Ctrl+Z** / **Ctrl+Y**) with up to 200 steps
 - Modern Windows 11–inspired color theme
@@ -72,7 +73,7 @@ waste time exploring far away from the floor plan.
 
 ## Usage
 
-Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors. The **Rename Floor** and **Delete Floor** buttons act on the currently selected floor (you can also rename by double‑clicking a floor name). Click a floor in the list to view it. Related drawing actions are grouped in the toolbar for quicker access and the active tool button is highlighted. Use **Undo** or **Redo** (Ctrl+Z/Ctrl+Y) to walk through recent changes.
+Open `index.html` in a modern web browser. A floor list is displayed to the left of the canvas. Use **Add Floor** to create new floors. The **Rename Floor** and **Delete Floor** buttons act on the currently selected floor (you can also rename by double‑clicking a floor name). Click a floor in the list to view it. Related drawing actions are grouped in the toolbar for quicker access and the active tool button is highlighted. Use **Undo** or **Redo** (Ctrl+Z/Ctrl+Y) to walk through recent changes. Press **F1** to see a list of shortcuts and mouse gestures.
 Below the floor list a distributor list shows all manifolds on the current floor. Selecting one highlights it in the plan and the **Delete Distributor** button removes it.
 A layer panel in the top-right corner provides eye and padlock icons for each layer. Click an eye to hide a layer or Alt-click to isolate it. Use the padlock to lock editing.
 The **Draw Wall** tool creates snapping lines. After placing a segment the next one begins from the previous endpoint, so you can chain walls together with successive clicks. Press **Esc** to finish and start elsewhere. Use **Draw Zone** in the same way; once you click near the starting point the polygon closes and you can enter its parameters. Use **Select/Move** to drag whole lines or their ends and edit their length in the **Line Length** input. Zones and distributors can also be moved with this tool. Double‑click a zone or distributor to change its properties or use the **Edit Distributor** button when a distributor is selected. Use **Delete Selected** (or press the Delete key) to remove the currently selected wall, zone or distributor.
