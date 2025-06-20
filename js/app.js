@@ -40,7 +40,17 @@ window.addEventListener('load', () => {
     const wallThicknessInput = document.getElementById('wallThickness');
     const lengthBox = document.getElementById('lengthBox');
     const helpOverlay = document.getElementById('helpOverlay');
-    const ilpWorker = new Worker('js/ilp-worker.js');
+    let ilpWorker = null;
+    try {
+        ilpWorker = new Worker('js/ilp-worker.js');
+        ilpWorker.onerror = () => {
+            console.warn('ILP worker failed, falling back to A*');
+            ilpWorker = null;
+        };
+    } catch (err) {
+        console.warn('ILP worker could not be started:', err);
+        ilpWorker = null;
+    }
 
     const toolButtons = {};
 
@@ -830,12 +840,16 @@ window.addEventListener('load', () => {
         });
         if (!pairs.length) return;
         const circuits = pairs.map(p => ({ start: nearestNode(graph, p.start), end: nearestNode(graph, p.end) }));
-        ilpWorker.onmessage = ev => {
-            if (ev.data.status !== 'ok') { generatePipesAStar(); return; }
-            const paths = ev.data.paths.map((edges,i)=>edgesToPath(graph, edges, circuits[i].start));
-            buildPipesFromPaths(pairs, paths);
-        };
-        ilpWorker.postMessage({ graph, circuits, maxLen: MAX_CIRCUIT_LENGTH * pixelsPerMeter, timeout: 2 });
+        if (ilpWorker) {
+            ilpWorker.onmessage = ev => {
+                if (ev.data.status !== 'ok') { generatePipesAStar(); return; }
+                const paths = ev.data.paths.map((edges,i)=>edgesToPath(graph, edges, circuits[i].start));
+                buildPipesFromPaths(pairs, paths);
+            };
+            ilpWorker.postMessage({ graph, circuits, maxLen: MAX_CIRCUIT_LENGTH * pixelsPerMeter, timeout: 2 });
+        } else {
+            generatePipesAStar();
+        }
     }
 
     function buildPipesFromPaths(pairs, paths) {

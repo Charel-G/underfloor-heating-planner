@@ -58,8 +58,8 @@ waste time exploring far away from the floor plan.
 - Automatic supply and return routing with serpentine filling that
   conforms to the zone shape
 - An optional ILP solver runs in a Web Worker to globally optimize
-  all circuits. If solving takes longer than two seconds the planner
-  falls back to the heuristic router.
+  all circuits. If the worker fails to load (for example when opening the page locally) or solving takes longer than two seconds, the
+  planner automatically falls back to the heuristic A* router.
 - A **Draw Pipes** tool lets you trace the connection from distributor to zone;
   the automatic loop begins from that entry path
 - Entry points are chosen near doorways and pipes maintain a 10–15 cm
