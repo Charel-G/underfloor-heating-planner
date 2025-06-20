@@ -40,6 +40,7 @@ window.addEventListener('load', () => {
     const wallThicknessInput = document.getElementById('wallThickness');
     const lengthBox = document.getElementById('lengthBox');
     const helpOverlay = document.getElementById('helpOverlay');
+    const ilpWorker = new Worker('js/ilp-worker.js');
 
     const toolButtons = {};
 
@@ -818,6 +819,53 @@ window.addEventListener('load', () => {
 
     function generatePipes() {
         if (!currentFloor) return;
+        const graph = buildGraphForILP();
+        const pairs = [];
+        currentFloor.distributors.forEach((d, di) => {
+            const zones = currentFloor.zones.filter(z => z.distributorId === di);
+            zones.forEach(z => {
+                const entry = entryPointForZone(z, distributorPort(d));
+                pairs.push({ zone: z, dist: d, spacing: z.spacing || (parseInt(spacingInput.value,10)||0)/1000*pixelsPerMeter || gridSize, start: {x: distributorPort(d).x, y: distributorPort(d).y}, end: entry });
+            });
+        });
+        if (!pairs.length) return;
+        const circuits = pairs.map(p => ({ start: nearestNode(graph, p.start), end: nearestNode(graph, p.end) }));
+        ilpWorker.onmessage = ev => {
+            if (ev.data.status !== 'ok') { generatePipesAStar(); return; }
+            const paths = ev.data.paths.map((edges,i)=>edgesToPath(graph, edges, circuits[i].start));
+            buildPipesFromPaths(pairs, paths);
+        };
+        ilpWorker.postMessage({ graph, circuits, maxLen: MAX_CIRCUIT_LENGTH * pixelsPerMeter, timeout: 2 });
+    }
+
+    function buildPipesFromPaths(pairs, paths) {
+        currentFloor.pipes = [];
+        const segmentCounts = new Map();
+        pairs.forEach((pair, idx) => {
+            const zone = pair.zone;
+            let toEntry = paths[idx];
+            if (!toEntry) {
+                toEntry = findPath({x:pair.start.x,y:pair.start.y},{x:pair.end.x,y:pair.end.y},{avoidZones:true,excludeZone:zone,spacing:pair.spacing}) || [];
+            }
+            const entry = toEntry[toEntry.length-1];
+            const baseOffset = 0;
+            const entryOffsetPath = offsetPath(toEntry, baseOffset);
+            const zonePath = zoneLoopPath(zone, pair.spacing, entry);
+            const supplyPath = entryOffsetPath.concat(zonePath);
+            const returnPath = offsetPath(toEntry.slice().reverse(), baseOffset + PARALLEL_OFFSET);
+            const length = pathLength(supplyPath) + pathLength(returnPath);
+            currentFloor.pipes.push({ zone, distributor: pair.dist, supplyPath, returnPath, length, parallelIndex:0, crossings: [] });
+            for (let i=0;i<toEntry.length-1;i++) {
+                const key = segmentKey(toEntry[i], toEntry[i+1]);
+                segmentCounts.set(key,(segmentCounts.get(key)||0)+1);
+            }
+        });
+        scheduleHistory();
+        drawAll();
+    }
+
+function generatePipesAStar() {
+        if (!currentFloor) return;
         currentFloor.pipes = [];
         const segmentCounts = new Map();
 
@@ -1588,6 +1636,71 @@ window.addEventListener('load', () => {
         if (segmentIntersectsWall(a.x, a.y, b.x, b.y)) return false;
         if (options.avoidZones && segmentIntersectsAnyZone(a.x, a.y, b.x, b.y, options.excludeZone)) return false;
         return true;
+    }
+
+    function buildGraphForILP() {
+        const step = gridSize / 5;
+        const b = floorBounds();
+        const minX = Math.floor(b.minX / step) - 2;
+        const maxX = Math.ceil(b.maxX / step) + 2;
+        const minY = Math.floor(b.minY / step) - 2;
+        const maxY = Math.ceil(b.maxY / step) + 2;
+        const nodes = [];
+        const index = new Map();
+        for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+                const px = x * step;
+                const py = y * step;
+                const idx = nodes.length;
+                nodes.push({ x: px, y: py });
+                index.set(`${x},${y}`, idx);
+            }
+        }
+        const edges = [];
+        function addEdge(x1,y1,x2,y2){
+            const a = index.get(`${x1},${y1}`);
+            const b = index.get(`${x2},${y2}`);
+            if (a == null || b == null) return;
+            const ax = x1 * step, ay = y1 * step;
+            const bx = x2 * step, by = y2 * step;
+            if (segmentIntersectsWall(ax, ay, bx, by)) return;
+            edges.push({ a, b, len: step });
+        }
+        for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+                if (x < maxX) addEdge(x, y, x + 1, y);
+                if (y < maxY) addEdge(x, y, x, y + 1);
+            }
+        }
+        return { step, nodes, edges };
+    }
+
+    function nearestNode(graph, pt) {
+        let best = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < graph.nodes.length; i++) {
+            const n = graph.nodes[i];
+            const d = (n.x - pt.x) * (n.x - pt.x) + (n.y - pt.y) * (n.y - pt.y);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    function edgesToPath(graph, edgePairs, startIdx) {
+        const map = new Map();
+        edgePairs.forEach(([a,b]) => {
+            if (!map.has(a)) map.set(a, []);
+            map.get(a).push(b);
+        });
+        const path = [graph.nodes[startIdx]];
+        let cur = startIdx;
+        const maxSteps = edgePairs.length + 2;
+        for (let step=0; step<maxSteps && map.has(cur) && map.get(cur).length; step++) {
+            const next = map.get(cur).shift();
+            path.push(graph.nodes[next]);
+            cur = next;
+        }
+        return path;
     }
 
     function simplifyPath(path) {
