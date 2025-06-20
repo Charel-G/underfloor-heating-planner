@@ -1,3 +1,8 @@
+// glpk.js is published as a UMD build which expects `module` in
+// CommonJS environments. Define a dummy `module` object so the script
+// attaches the factory function to `module.exports` when running in the
+// worker.
+self.module = {exports:{}};
 importScripts('https://cdn.jsdelivr.net/npm/glpk.js/dist/glpk.min.js');
 
 let glpkReady = null;
@@ -8,6 +13,8 @@ function initGlpk(){
         glpk().then(resolve);
       }else if(typeof GLPK === 'function'){
         GLPK().then(resolve);
+      }else if(self.module && typeof self.module.exports === 'function'){
+        self.module.exports().then(resolve);
       }else{
         resolve(null);
       }
