@@ -101,8 +101,9 @@ The grid is scaled so that 0.5 m corresponds to roughly 1 cm on screen. The 
 
 The interface features a colorful Windows 11–style theme. A gradient header and light panels give the planner a modern appearance while keeping controls readable.
 
-You can simply open `index.html` in your browser or run a small local server
-with Python:
+You can simply open `index.html` in your browser, but some browsers block the
+solver's WebAssembly file when loaded directly from disk. For best results run
+a small local server with Python:
 
 ```bash
 python3 -m http.server 8000

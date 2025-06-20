@@ -2,20 +2,26 @@
 // CommonJS environments. Define a dummy `module` object so the script
 // attaches the factory function to `module.exports` when running in the
 // worker.
-self.module = {exports:{}};
+self.module = {exports: {}};
 importScripts('https://cdn.jsdelivr.net/npm/glpk.js/dist/glpk.min.js');
 
 let glpkReady = null;
-function initGlpk(){
-  if(!glpkReady){
-    glpkReady = new Promise(resolve=>{
-      if(typeof glpk === 'function'){
-        glpk().then(resolve);
-      }else if(typeof GLPK === 'function'){
-        GLPK().then(resolve);
-      }else if(self.module && typeof self.module.exports === 'function'){
-        self.module.exports().then(resolve);
-      }else{
+function initGlpk() {
+  if (!glpkReady) {
+    glpkReady = new Promise(resolve => {
+      function handle(p) {
+        p.then(resolve).catch(err => {
+          console.warn('GLPK failed to load:', err);
+          resolve(null);
+        });
+      }
+      if (typeof glpk === 'function') {
+        handle(glpk());
+      } else if (typeof GLPK === 'function') {
+        handle(GLPK());
+      } else if (self.module && typeof self.module.exports === 'function') {
+        handle(self.module.exports());
+      } else {
         resolve(null);
       }
     });
