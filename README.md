@@ -21,6 +21,14 @@ outside their boundaries.
 When several circuits must follow the same corridor from their distributor,
 each pair of pipes is offset to run alongside the others instead of sharing the
 exact same line.
+The offset is applied while tracing paths back to the distributor so parallel
+circuits no longer overlap.
+
+Pipe loops in irregularly shaped rooms now offset the zone polygon by the pipe
+spacing plus pipe diameter before filling. This "safety skin" keeps circuits
+10–15 cm away from sharp corners and prevents loops from being clipped.
+Routes from distributors are simplified after A* search using Manhattan and
+Ramer–Douglas–Peucker passes so long corridors contain fewer right‑angle bends.
 
 The planner now chooses entry points near doorways whenever possible and keeps
 pipes about 10–15 cm from walls. The serpentine pattern aligns with the longest

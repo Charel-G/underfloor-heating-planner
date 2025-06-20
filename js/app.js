@@ -67,6 +67,7 @@ window.addEventListener('load', () => {
     const PARALLEL_OFFSET = 6;
     const PORT_SPACING = PARALLEL_OFFSET * 2; // spacing between pipe pairs on distributors
     let pixelsPerMeter = gridSize * 2; // 0.5 m per grid square
+    let pipeDiameter = 0.02 * pixelsPerMeter; // ~20 mm
     let scale = 1;
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
@@ -838,9 +839,9 @@ window.addEventListener('load', () => {
                     entry = toEntry[toEntry.length - 1];
                 } else {
                     entry = entryPointForZone(zone, distPos);
-                    toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: true, excludeZone: zone});
+                    toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: true, excludeZone: zone, spacing});
                     if (!toEntry) {
-                        toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: false});
+                        toEntry = findPath({ x: distPos.x, y: distPos.y }, entry, {avoidZones: false, spacing});
                     }
                     if (!toEntry) {
                         alert(`No path found from distributor "${dist.name}" to zone "${zone.name}"`);
@@ -856,9 +857,19 @@ window.addEventListener('load', () => {
 
                 const crossings = zoneCrossingIndices(toEntry, zone);
 
+                let parallelIndex = 0;
+                for (let i = 0; i < toEntry.length - 1; i++) {
+                    const key = segmentKey(toEntry[i], toEntry[i+1]);
+                    const count = segmentCounts.get(key) || 0;
+                    if (count > parallelIndex) parallelIndex = count;
+                }
+
+                const baseOffset = PARALLEL_OFFSET * 2 * parallelIndex;
+                const entryOffsetPath = offsetPath(toEntry, baseOffset);
+                entry = entryOffsetPath[entryOffsetPath.length - 1];
                 const zonePath = zoneLoopPath(zone, spacing, entry);
-                const supplyPath = toEntry.concat(zonePath);
-                const returnPath = toEntry.slice().reverse();
+                const supplyPath = entryOffsetPath.concat(zonePath);
+                const returnPath = offsetPath(toEntry.slice().reverse(), baseOffset + PARALLEL_OFFSET);
 
                 if (!pathValid(supplyPath, {avoidZones:false}) || !pathValid(returnPath, {avoidZones:false})) {
                     alert(`Pipe layout for zone "${zone.name}" intersects a wall`);
@@ -866,13 +877,6 @@ window.addEventListener('load', () => {
                 }
 
                 const length = pathLength(supplyPath) + pathLength(returnPath);
-
-                let parallelIndex = 0;
-                for (let i = 0; i < toEntry.length - 1; i++) {
-                    const key = segmentKey(toEntry[i], toEntry[i+1]);
-                    const count = segmentCounts.get(key) || 0;
-                    if (count > parallelIndex) parallelIndex = count;
-                }
 
                 currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length, parallelIndex, crossings });
 
@@ -1268,6 +1272,116 @@ window.addEventListener('load', () => {
         };
     }
 
+    function offsetPath(path, dist) {
+        if (Math.abs(dist) < 1e-6) return path.map(p => ({ x: p.x, y: p.y }));
+        const segs = [];
+        for (let i = 0; i < path.length - 1; i++) {
+            const p1 = path[i];
+            const p2 = path[i + 1];
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ox = -dy / len * dist;
+            const oy = dx / len * dist;
+            segs.push({
+                start: { x: p1.x + ox, y: p1.y + oy },
+                end: { x: p2.x + ox, y: p2.y + oy }
+            });
+        }
+        const out = [segs[0].start];
+        for (let i = 0; i < segs.length - 1; i++) {
+            const s1 = segs[i];
+            const s2 = segs[i + 1];
+            const inter = lineIntersection(
+                s1.start.x, s1.start.y, s1.end.x, s1.end.y,
+                s2.start.x, s2.start.y, s2.end.x, s2.end.y
+            );
+            out.push(inter ? { x: inter.x, y: inter.y } : s1.end);
+        }
+        out.push(segs[segs.length - 1].end);
+        return out;
+    }
+
+    function polygonArea(poly) {
+        let a = 0;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            a += (poly[j].x * poly[i].y - poly[i].x * poly[j].y);
+        }
+        return a / 2;
+    }
+
+    function offsetPolygon(poly, dist) {
+        if (poly.length < 3) return poly.slice();
+        const sign = polygonArea(poly) > 0 ? 1 : -1;
+        const out = [];
+        for (let i = 0; i < poly.length; i++) {
+            const p0 = poly[(i - 1 + poly.length) % poly.length];
+            const p1 = poly[i];
+            const p2 = poly[(i + 1) % poly.length];
+            const dx1 = p1.x - p0.x;
+            const dy1 = p1.y - p0.y;
+            const dx2 = p2.x - p1.x;
+            const dy2 = p2.y - p1.y;
+            const len1 = Math.hypot(dx1, dy1) || 1;
+            const len2 = Math.hypot(dx2, dy2) || 1;
+            const n1x = sign * dy1 / len1;
+            const n1y = -sign * dx1 / len1;
+            const n2x = sign * dy2 / len2;
+            const n2y = -sign * dx2 / len2;
+            const p1a = { x: p0.x + n1x * dist, y: p0.y + n1y * dist };
+            const p1b = { x: p1.x + n1x * dist, y: p1.y + n1y * dist };
+            const p2a = { x: p1.x + n2x * dist, y: p1.y + n2y * dist };
+            const p2b = { x: p2.x + n2x * dist, y: p2.y + n2y * dist };
+            const inter = lineIntersection(p1a.x, p1a.y, p1b.x, p1b.y,
+                                          p2a.x, p2a.y, p2b.x, p2b.y);
+            out.push(inter ? { x: inter.x, y: inter.y } : p1b);
+        }
+        return out;
+    }
+
+    function perpendicularDistance(p, a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lenSq = dx * dx + dy * dy || 1;
+        const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+        const projx = a.x + t * dx;
+        const projy = a.y + t * dy;
+        return Math.hypot(p.x - projx, p.y - projy);
+    }
+
+    function manhattanSimplify(path, options = {}) {
+        let out = path.slice();
+        let changed = true;
+        while (changed && out.length > 2) {
+            changed = false;
+            for (let i = 0; i < out.length - 2; i++) {
+                if (lineClear(out[i], out[i + 2], options)) {
+                    out.splice(i + 1, 1);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    function rdpSimplify(points, epsilon) {
+        if (points.length <= 2) return points.slice();
+        let dmax = 0, index = 0;
+        const end = points.length - 1;
+        for (let i = 1; i < end; i++) {
+            const d = perpendicularDistance(points[i], points[0], points[end]);
+            if (d > dmax) { index = i; dmax = d; }
+        }
+        if (dmax > epsilon) {
+            const res1 = rdpSimplify(points.slice(0, index + 1), epsilon);
+            const res2 = rdpSimplify(points.slice(index), epsilon);
+            return res1.slice(0, -1).concat(res2);
+        }
+        return [ points[0], points[end] ];
+    }
+
+
     function wallHitInfo(x, y) {
         for (let i = currentFloor.walls.length - 1; i >= 0; i--) {
             const w = currentFloor.walls[i];
@@ -1465,7 +1579,12 @@ window.addEventListener('load', () => {
             return false;
         }
 
-        if (!segmentBlocked(start.x, start.y, end.x, end.y)) return [start, end];
+        if (!segmentBlocked(start.x, start.y, end.x, end.y)) {
+            let direct = [start, end];
+            direct = manhattanSimplify(direct, {avoidZones, excludeZone});
+            direct = rdpSimplify(direct, (options.spacing || gridSize) / 2);
+            return direct;
+        }
         const limit = farthestWallDistance(start);
         const queue = [{ x: start.x, y: start.y, path: [start] }];
         const visited = new Set([
@@ -1481,7 +1600,10 @@ window.addEventListener('load', () => {
             const n = queue.shift();
             if (Math.abs(n.x - end.x) < step/2 && Math.abs(n.y - end.y) < step/2) {
                 n.path.push({ x: end.x, y: end.y });
-                return simplifyPath(n.path);
+                let res = simplifyPath(n.path);
+                res = manhattanSimplify(res, {avoidZones, excludeZone});
+                res = rdpSimplify(res, (options.spacing || gridSize) / 2);
+                return res;
             }
             for (const [dx, dy] of dirs) {
                 const nx = n.x + dx;
@@ -1749,10 +1871,12 @@ window.addEventListener('load', () => {
     // path always starts and ends at the entry point so the circuit is
     // closed even when clipping removes outer segments.
     function zoneLoopPath(zone, spacing, entry) {
-        const rect = zoneBounds(zone);
+        const safePoly = offsetPolygon(zone.points, -(spacing + pipeDiameter));
+        const poly = safePoly.length >= 3 ? safePoly : zone.points;
+        const rect = zoneBounds({points: poly});
         const orientation = rect.width >= rect.height ? 'horizontal' : 'vertical';
         const raw = zoneLoopRect(rect, spacing, entry, orientation);
-        let clipped = clipPathToPolygon(raw, zone.points);
+        let clipped = clipPathToPolygon(raw, poly);
         if (!clipped.length) clipped = raw.slice();
         const eps = 1e-6;
         const start = { x: entry.x, y: entry.y };
