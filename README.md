@@ -24,11 +24,14 @@ exact same line.
 The offset is applied while tracing paths back to the distributor so parallel
 circuits no longer overlap.
 
-Pipe loops in irregularly shaped rooms now offset the zone polygon by the pipe
-spacing plus pipe diameter before filling. This "safety skin" keeps circuits
-10–15 cm away from sharp corners and prevents loops from being clipped.
-Routes from distributors are simplified after A* search using Manhattan and
-Ramer–Douglas–Peucker passes so long corridors contain fewer right‑angle bends.
+Pipe loops in irregularly shaped rooms are rotated to align with the longest
+axis of each zone (using a simple principal component analysis). The polygon is
+decomposed into horizontal strips and filled boustrophedon style so every
+corner receives coverage. A small safety offset keeps the pipes about
+10–15 cm from sharp edges. Routes from distributors are simplified after A*
+search using Manhattan and Ramer–Douglas–Peucker passes so long corridors
+contain fewer right‑angle bends. If a full circuit would exceed
+120 m in length, the planner warns you to split the zone.
 
 The planner now chooses entry points near doorways whenever possible and keeps
 pipes about 10–15 cm from walls. The serpentine pattern aligns with the longest
@@ -58,7 +61,9 @@ waste time exploring far away from the floor plan.
   the automatic loop begins from that entry path
 - Entry points are chosen near doorways and pipes maintain a 10–15 cm
   clearance from walls
-- Serpentine rows align with the longest wall of each zone
+- Serpentine rows align with the longest wall of each zone using a PCA-based orientation
+- Boustrophedon decomposition ensures irregular rooms are fully covered
+- If a calculated pipe circuit exceeds 120 m you’re warned to split the zone
 - Pipes respect wall thickness and keep the loop one spacing away from zone edges
 - When different circuits share the same corridor, pipes are offset in pairs so
   each supply and return line runs alongside its partner without overlapping

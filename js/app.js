@@ -71,6 +71,7 @@ window.addEventListener('load', () => {
     let scale = 1;
     let defaultWallThickness = 0.25 * pixelsPerMeter;
     let entryClearance = 0.15 * pixelsPerMeter; // keep pipes ~15cm from walls
+    const MAX_CIRCUIT_LENGTH = 120; // metres
     let offsetX = 0;
     let offsetY = 0;
     let floors = [];
@@ -877,6 +878,9 @@ window.addEventListener('load', () => {
                 }
 
                 const length = pathLength(supplyPath) + pathLength(returnPath);
+                if (length > MAX_CIRCUIT_LENGTH) {
+                    alert(`Pipe circuit for zone "${zone.name}" exceeds ${MAX_CIRCUIT_LENGTH} m`);
+                }
 
                 currentFloor.pipes.push({ zone, distributor: dist, supplyPath, returnPath, length, parallelIndex, crossings });
 
@@ -1337,6 +1341,43 @@ window.addEventListener('load', () => {
             out.push(inter ? { x: inter.x, y: inter.y } : p1b);
         }
         return out;
+    }
+
+    function polygonCentroid(poly) {
+        let cx = 0, cy = 0, a = 0;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const f = poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+            cx += (poly[j].x + poly[i].x) * f;
+            cy += (poly[j].y + poly[i].y) * f;
+            a += f;
+        }
+        a = a || 1;
+        cx /= 3 * a;
+        cy /= 3 * a;
+        return { x: cx, y: cy };
+    }
+
+    function rotatePoint(p, angle, origin) {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const x = p.x - origin.x;
+        const y = p.y - origin.y;
+        return {
+            x: origin.x + x * cos - y * sin,
+            y: origin.y + x * sin + y * cos
+        };
+    }
+
+    function dominantAxisAngle(points) {
+        const c = polygonCentroid(points);
+        let sxx = 0, syy = 0, sxy = 0;
+        points.forEach(p => {
+            const dx = p.x - c.x;
+            const dy = p.y - c.y;
+            sxx += dx * dx;
+            syy += dy * dy;
+            sxy += dx * dy;
+        });
+        return 0.5 * Math.atan2(2 * sxy, sxx - syy);
     }
 
     function perpendicularDistance(p, a, b) {
@@ -1873,9 +1914,15 @@ window.addEventListener('load', () => {
     function zoneLoopPath(zone, spacing, entry) {
         const safePoly = offsetPolygon(zone.points, -(spacing + pipeDiameter));
         const poly = safePoly.length >= 3 ? safePoly : zone.points;
-        const rect = zoneBounds({points: poly});
-        const orientation = rect.width >= rect.height ? 'horizontal' : 'vertical';
-        const raw = zoneLoopRect(rect, spacing, entry, orientation);
+
+        const angle = dominantAxisAngle(poly);
+        const c = polygonCentroid(poly);
+        const rotPoly = poly.map(p => rotatePoint(p, -angle, c));
+        const rotEntry = rotatePoint(entry, -angle, c);
+        const rect = zoneBounds({points: rotPoly});
+        const orient = rect.width >= rect.height ? 'horizontal' : 'vertical';
+        const rawRot = zoneLoopRect(rect, spacing, rotEntry, orient);
+        const raw = rawRot.map(p => rotatePoint(p, angle, c));
         let clipped = clipPathToPolygon(raw, poly);
         if (!clipped.length) clipped = raw.slice();
         const eps = 1e-6;
