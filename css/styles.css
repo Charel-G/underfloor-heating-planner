@@ -215,3 +215,20 @@ button.active {
     transform: translate(-50%, -100%);
     white-space: nowrap;
 }
+
+.modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    padding: 10px;
+    z-index: 50;
+}
+
+.modal h3 {
+    margin-top: 0;
+}

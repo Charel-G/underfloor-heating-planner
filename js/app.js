@@ -27,6 +27,12 @@ window.addEventListener('load', () => {
     const exportBtn = document.getElementById('exportBtn');
     const importBtn = document.getElementById('importBtn');
     const importFile = document.getElementById('importFile');
+    const importPlanBtn = document.getElementById('importPlanBtn');
+    const planImageInput = document.getElementById('planImageInput');
+    const planDialog = document.getElementById('planDialog');
+    const planOpacity = document.getElementById('planOpacity');
+    const setPlanRefBtn = document.getElementById('setPlanRefBtn');
+    const closePlanDialog = document.getElementById('closePlanDialog');
     const fixWallsBtn = document.getElementById('fixWallsBtn');
     const layerPanel = document.getElementById('layerPanel');
     const spacingInput = document.getElementById('pipeSpacing');
@@ -82,6 +88,8 @@ window.addEventListener('load', () => {
     let zoneDrawing = null; // array of points while creating a zone
     let pipeDrawing = null; // current manual pipe path
     let typedLength = '';
+    let settingPlanRef = false;
+    let planRefPoints = [];
 
     // history for undo/redo
     let history = [];
@@ -158,7 +166,8 @@ window.addEventListener('load', () => {
             walls: [],
             zones: [],
             distributors: [],
-            pipes: []
+            pipes: [],
+            background: {image:null, offsetX:0, offsetY:0, scale:1, rotation:0, opacity:0.5}
         });
         currentFloor = floors[floors.length - 1];
         updateFloorList();
@@ -535,12 +544,27 @@ window.addEventListener('load', () => {
         ctx.restore();
     }
 
+    function drawPlanImage() {
+        if (!currentFloor || !currentFloor.background || !currentFloor.background.image) return;
+        const bg = currentFloor.background;
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = bg.opacity;
+        ctx.translate(bg.offsetX, bg.offsetY);
+        ctx.rotate(bg.rotation);
+        ctx.scale(bg.scale, bg.scale);
+        ctx.drawImage(bg.image, 0, 0);
+        ctx.restore();
+    }
+
     function drawAll() {
         if (historyPending) {
             pushHistoryNow();
         }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         lengthBox.style.display = 'none';
+        drawPlanImage();
         if (layers.guides.visible) drawGrid();
         ctx.save();
         ctx.translate(offsetX, offsetY);
@@ -959,6 +983,19 @@ window.addEventListener('load', () => {
         e.target.value = '';
     }
 
+    function handlePlanImage(e) {
+        const file = e.target.files[0];
+        if (!file || !currentFloor) return;
+        const img = new Image();
+        img.onload = () => {
+            currentFloor.background = { image: img, offsetX: 0, offsetY: 0, scale: 1, rotation: 0, opacity: parseFloat(planOpacity.value) || 0.5 };
+            planDialog.style.display = 'block';
+            drawAll();
+        };
+        img.src = URL.createObjectURL(file);
+        e.target.value = '';
+    }
+
     function exportPlan() {
         if (!currentFloor) return;
         drawAll();
@@ -995,6 +1032,22 @@ window.addEventListener('load', () => {
             dx: Math.cos(result) * len,
             dy: Math.sin(result) * len
         };
+    }
+
+    function applyReference(p1, p2, distMeters) {
+        if (!currentFloor || !currentFloor.background) return;
+        const bg = currentFloor.background;
+        const imgP1 = worldToPlan(p1);
+        const imgP2 = worldToPlan(p2);
+        const imgDist = Math.hypot(imgP2.x - imgP1.x, imgP2.y - imgP1.y);
+        if (!imgDist) return;
+        bg.scale = distMeters * pixelsPerMeter / imgDist;
+        const imgAngle = Math.atan2(imgP2.y - imgP1.y, imgP2.x - imgP1.x);
+        bg.rotation = -imgAngle;
+        const cos = Math.cos(bg.rotation);
+        const sin = Math.sin(bg.rotation);
+        bg.offsetX = p1.x - (imgP1.x * bg.scale * cos - imgP1.y * bg.scale * sin);
+        bg.offsetY = p1.y - (imgP1.x * bg.scale * sin + imgP1.y * bg.scale * cos);
     }
 
     function snapToPoints(x, y) {
@@ -1769,6 +1822,30 @@ window.addEventListener('load', () => {
         return { x: (x - offsetX) / scale, y: (y - offsetY) / scale };
     }
 
+    function worldToPlan(pt) {
+        const bg = currentFloor && currentFloor.background;
+        if (!bg) return pt;
+        let x = pt.x - bg.offsetX;
+        let y = pt.y - bg.offsetY;
+        const cos = Math.cos(-bg.rotation);
+        const sin = Math.sin(-bg.rotation);
+        const nx = x * cos - y * sin;
+        const ny = x * sin + y * cos;
+        return { x: nx / bg.scale, y: ny / bg.scale };
+    }
+
+    function planToWorld(pt) {
+        const bg = currentFloor && currentFloor.background;
+        if (!bg) return pt;
+        let x = pt.x * bg.scale;
+        let y = pt.y * bg.scale;
+        const cos = Math.cos(bg.rotation);
+        const sin = Math.sin(bg.rotation);
+        const nx = x * cos - y * sin;
+        const ny = x * sin + y * cos;
+        return { x: nx + bg.offsetX, y: ny + bg.offsetY };
+    }
+
     function hitTestZone(x, y) {
         if (!layers.zones.visible) return null;
         for (let i = currentFloor.zones.length - 1; i >= 0; i--) {
@@ -1846,6 +1923,20 @@ window.addEventListener('load', () => {
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
         const world = screenToWorld(sx, sy);
+        if (settingPlanRef) {
+            planRefPoints.push(world);
+            if (planRefPoints.length === 2) {
+                const dist = parseFloat(prompt('Distance between points (m)?', '1'));
+                if (!isNaN(dist)) {
+                    applyReference(planRefPoints[0], planRefPoints[1], dist);
+                }
+                planRefPoints = [];
+                settingPlanRef = false;
+                planDialog.style.display = 'block';
+                drawAll();
+            }
+            return;
+        }
         if (mode === 'pan') {
             startX = sx;
             startY = sy;
@@ -2171,6 +2262,11 @@ window.addEventListener('load', () => {
     exportBtn.addEventListener('click', exportPlan);
     importBtn.addEventListener('click', () => importFile.click());
     importFile.addEventListener('change', handleImport);
+    importPlanBtn.addEventListener('click', () => planImageInput.click());
+    planImageInput.addEventListener('change', handlePlanImage);
+    setPlanRefBtn.addEventListener('click', () => { settingPlanRef = true; planRefPoints = []; planDialog.style.display = 'none'; });
+    closePlanDialog.addEventListener('click', () => { planDialog.style.display = 'none'; drawAll(); });
+    planOpacity.addEventListener('input', () => { if (currentFloor && currentFloor.background) { currentFloor.background.opacity = parseFloat(planOpacity.value); drawAll(); } });
     fixWallsBtn.addEventListener('click', () => { connectWalls(); drawAll(); });
 
     layerPanel.addEventListener('click', e => {
